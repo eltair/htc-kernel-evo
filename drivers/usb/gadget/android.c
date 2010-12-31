@@ -33,6 +33,8 @@
 #include <linux/usb/gadget.h>
 
 #include "gadget_chips.h"
+#include <linux/wakelock.h>
+#include <mach/perflock.h>
 
 /*
  * Kbuild is not very cooperative with respect to linking separately
@@ -52,6 +54,8 @@ MODULE_LICENSE("GPL");
 MODULE_VERSION("1.0");
 
 static const char longname[] = "Gadget Android";
+static struct wake_lock usb_rndis_idle_wake_lock;
+static struct perf_lock usb_rndis_perf_lock;
 
 enum {
 	USB_FUNCTION_UMS = 0,
@@ -431,7 +435,9 @@ int android_switch_function(unsigned func)
 	struct usb_function		*f;
 	struct android_dev *dev = _android_dev;
 	int product_id;
+
 	printk(KERN_INFO "%s: %u\n", __func__, func);
+
 	list_for_each_entry(f, &android_config_driver.functions, list) {
 		if ((func & (1 << USB_FUNCTION_UMS)) &&
 			!strcmp(f->name, "usb_mass_storage"))
@@ -440,9 +446,15 @@ int android_switch_function(unsigned func)
 			!strcmp(f->name, "adb"))
 			f->hidden = 0;
 		else if ((func & (1 << USB_FUNCTION_RNDIS)) &&
-			!strcmp(f->name, "ether"))
+			!strcmp(f->name, "ether")) {
+			if (f->hidden) {
+				printk("%s: rndis perf lock\n", __func__);
+				wake_lock(&usb_rndis_idle_wake_lock);
+				if (!is_perf_lock_active(&usb_rndis_perf_lock))
+					perf_lock(&usb_rndis_perf_lock);
+			}
 			f->hidden = 0;
-		else if ((func & (1 << USB_FUNCTION_DIAG)) &&
+		} else if ((func & (1 << USB_FUNCTION_DIAG)) &&
 			!strcmp(f->name, "diag"))
 			f->hidden = 0;
 		else if ((func & (1 << USB_FUNCTION_MODEM)) &&
@@ -461,8 +473,15 @@ int android_switch_function(unsigned func)
 		else if ((func & (1 << USB_FUNCTION_PROJECTOR)) &&
 			!strcmp(f->name, "projector"))
 			f->hidden = 0;
-		else
+		else {
+			if (!strcmp(f->name, "ether") && !f->hidden) {
+				printk("%s: rndis perf unlock\n", __func__);
+				wake_unlock(&usb_rndis_idle_wake_lock);
+				if (is_perf_lock_active(&usb_rndis_perf_lock))
+					perf_unlock(&usb_rndis_perf_lock);
+			}
 			f->hidden = 1;
+		}
 	}
 	product_id = get_product_id(dev);
 	device_desc.idProduct = __constant_cpu_to_le16(product_id);
@@ -594,6 +613,9 @@ static int __init init(void)
 	/* set default values, which should be overridden by platform data */
 	dev->product_id = PRODUCT_ID;
 	_android_dev = dev;
+
+	wake_lock_init(&usb_rndis_idle_wake_lock, WAKE_LOCK_IDLE, "rndis_idle_lock");
+	perf_lock_init(&usb_rndis_perf_lock, PERF_LOCK_HIGHEST, "rndis");
 
 	return platform_driver_register(&android_platform_driver);
 }

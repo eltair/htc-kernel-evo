@@ -130,6 +130,29 @@ static int is_sd_platform(struct mmc_platform_data *plat)
 	return 0;
 }
 
+static int is_mmc_platform(struct mmc_platform_data *plat)
+{
+	if (plat->slot_type && *plat->slot_type == MMC_TYPE_MMC)
+		return 1;
+
+	return 0;
+}
+
+static int is_svlte_platform(struct mmc_platform_data *plat)
+{
+	if (plat->slot_type && *plat->slot_type == MMC_TYPE_SDIO_SVLTE)
+		return 1;
+
+	return 0;
+}
+
+int is_svlte_type_mmc_card(struct mmc_card *card)
+{
+	struct msmsdcc_host *host = mmc_priv(card->host);
+
+	return is_svlte_platform(host->plat);
+}
+
 #if BUSCLK_PWRSAVE
 static int is_wimax_platform(struct mmc_platform_data *plat)
 {
@@ -143,8 +166,16 @@ static inline void
 msmsdcc_disable_clocks(struct msmsdcc_host *host, int deferr)
 {
 	u32 delay = BUSCLK_TIMEOUT;
+
+	if (is_wimax_platform(host->plat) && mmc_wimax_get_status()) {
+		if (host->curr.mrq) {
+			printk("%s curr.mrq != NULL", __func__);
+			return;
+		}
+	}
+
 	WARN_ON(!host->clks_on);
-	WARN_ON(host->curr.mrq);
+	BUG_ON(host->curr.mrq);
 
 	if (is_wimax_platform(host->plat) && mmc_wimax_get_status()) {
 		if (DISABLE_WIMAX_BUSCLK_PWRSAVE)
@@ -211,6 +242,8 @@ static char *mmc_type_str(unsigned int slot_type)
 	case MMC_TYPE_MMC:	return "MMC";
 	case MMC_TYPE_SD:	return "SD";
 	case MMC_TYPE_SDIO:	return "SDIO";
+	case MMC_TYPE_SDIO_WIMAX:	return "SDIO(WiMAX)";
+	case MMC_TYPE_SDIO_SVLTE:	return "SDIO(SVLTE)";
 	default:		return "Unknown type";
 	}
 }
@@ -737,13 +770,14 @@ msmsdcc_pio_write(struct msmsdcc_host *host, char *buffer,
 	} else {
 #endif
 		do {
-			unsigned int count, maxcnt;
+			unsigned int count, maxcnt, sz;
 
 			maxcnt = status & MCI_TXFIFOEMPTY ? MCI_FIFOSIZE :
 							MCI_FIFOHALFSIZE;
 			count = min(remain, maxcnt);
 
-			writesl(base + MMCIFIFO, ptr, count >> 2);
+			sz = count % 4 ? (count >> 2) + 1 : (count >> 2);
+			writesl(base + MMCIFIFO, ptr, sz);
 			ptr += count;
 			remain -= count;
 
@@ -777,6 +811,8 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 	struct msmsdcc_host	*host = dev_id;
 	uint32_t		status;
 
+
+	spin_lock(&host->lock);
 	status = msmsdcc_readl(host, MMCISTATUS);
 #if IRQ_DEBUG
 	msmsdcc_print_status(host, "irq1-r", status);
@@ -813,6 +849,7 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 			printk("TX\n");
 		}
 
+		spin_unlock(&host->lock);
 		return IRQ_HANDLED;
 	}
 
@@ -878,6 +915,7 @@ msmsdcc_pio_irq(int irq, void *dev_id)
 	if (!host->curr.xfer_remain)
 		msmsdcc_writel(host, 0, MMCIMASK1);
 
+	spin_unlock(&host->lock);
 	return IRQ_HANDLED;
 }
 
@@ -963,8 +1001,11 @@ msmsdcc_handle_irq_data(struct msmsdcc_host *host, u32 status,
 		 * Check to see if there is still data to be read,
 		 * and simulate a PIO irq.
 		 */
-		if (readl(base + MMCISTATUS) & MCI_RXDATAAVLBL)
+		if (readl(base + MMCISTATUS) & MCI_RXDATAAVLBL) {
+			spin_unlock(&host->lock);
 			msmsdcc_pio_irq(1, host);
+			spin_lock(&host->lock);
+		}
 
 		msmsdcc_stop_data(host);
 		if (!data->error)
@@ -1102,11 +1143,24 @@ msmsdcc_set_ios(struct mmc_host *mmc, struct mmc_ios *ios)
 		clk |= MCI_CLK_ENABLE;
 	}
 
-	if (ios->bus_width == MMC_BUS_WIDTH_4)
-		clk |= (2 << 10); /* Set WIDEBUS */
+	if (ios->bus_width == MMC_BUS_WIDTH_8)
+		clk |= MCI_CLK_WIDEBUS_8;
+	else if (ios->bus_width == MMC_BUS_WIDTH_4)
+		clk |= MCI_CLK_WIDEBUS_4;
+	else
+		clk |= MCI_CLK_WIDEBUS_1;
 
-	if (ios->clock > 400000 && msmsdcc_pwrsave)
-		clk |= (1 << 9); /* PWRSAVE */
+	if (!is_mmc_platform(host->plat)) {
+		if (ios->clock > 400000 && msmsdcc_pwrsave)
+			clk |= (1 << 9); /* PWRSAVE */
+	} else {
+
+		if ((ios->bus_width == MMC_BUS_WIDTH_8) ||
+			(ios->bus_width == MMC_BUS_WIDTH_4))
+			if (ios->clock > 400000 && msmsdcc_pwrsave)
+				clk |= (1 << 9); /* PWRSAVE */
+	}
+
 
 	clk |= (1 << 12); /* FLOW_ENA */
 	clk |= (1 << 15); /* feedback clock */
@@ -1431,10 +1485,17 @@ msmsdcc_probe(struct platform_device *pdev)
 	mmc->f_max = msmsdcc_fmax;
 	mmc->ocr_avail = plat->ocr_mask;
 
-	if (msmsdcc_4bit)
-		mmc->caps |= MMC_CAP_4_BIT_DATA;
+
+	if (is_mmc_platform(host->plat) || is_svlte_platform(host->plat))
+		mmc->caps |= plat->mmc_bus_width;
+	else {
+		if (msmsdcc_4bit)
+			mmc->caps |= MMC_CAP_4_BIT_DATA;
+	}
+
 	if (msmsdcc_sdioirq)
 		mmc->caps |= MMC_CAP_SDIO_IRQ;
+
 	mmc->caps |= MMC_CAP_MMC_HIGHSPEED | MMC_CAP_SD_HIGHSPEED;
 
 	mmc->max_phys_segs = NR_SG;
@@ -1576,12 +1637,9 @@ msmsdcc_suspend(struct platform_device *dev, pm_message_t state)
 	if (mmc) {
 		struct msmsdcc_host *host = mmc_priv(mmc);
 
-		if (host->stat_irq)
-			disable_irq(host->stat_irq);
-
-
-		if (mmc->card && mmc->card->type != MMC_TYPE_SDIO)
+		if (mmc->card && (mmc->card->type != MMC_TYPE_SDIO))
 			rc = mmc_suspend_host(mmc, state);
+
 		if (!rc)
 			msmsdcc_writel(host, 0, MMCIMASK0);
 #if BUSCLK_PWRSAVE
@@ -1608,16 +1666,14 @@ msmsdcc_resume(struct platform_device *dev)
 
 		msmsdcc_writel(host, host->saved_irq0mask, MMCIMASK0);
 
-		if (mmc->card && mmc->card->type != MMC_TYPE_SDIO) {
+		if (mmc->card && (mmc->card->type != MMC_TYPE_SDIO)) {
 #ifdef CONFIG_MMC_MSM7X00A_RESUME_IN_WQ
 			schedule_work(&host->resume_task);
 #else
-			mmc_resume_host(mmc);
+			if (!is_sd_platform(host->plat) || !host->eject)
+				mmc_resume_host(mmc);
 #endif
 		}
-
-		if (host->stat_irq)
-			enable_irq(host->stat_irq);
 
 #if BUSCLK_PWRSAVE
 		if (host->clks_on)

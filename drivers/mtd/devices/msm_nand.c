@@ -176,6 +176,11 @@ static void *msm_nand_get_dma_buffer(struct msm_nand_chip *chip, size_t size)
 	do {
 		free_index = __ffs(free_bitmask);
 		current_need_mask = need_mask << free_index;
+
+		if (size + free_index * MSM_NAND_DMA_BUFFER_SLOTS >=
+						MSM_NAND_DMA_BUFFER_SIZE)
+			return NULL;
+
 		if ((bitmask & current_need_mask) == 0) {
 			old_bitmask =
 				atomic_cmpxchg(&chip->dma_buffer_busy,
@@ -1432,19 +1437,24 @@ module_param_call(vendor, NULL, param_get_vendor_name, NULL, S_IRUGO);
 static int param_get_nand_info(char *buffer, struct kernel_param *kp)
 {
 	int result = 0;
-	result += sprintf(buffer, "<<  NAND INFO  >>\n");
-	result += sprintf(buffer + result, "flash id\t =%X\n",
+
+	if (nand_info) {
+		result += sprintf(buffer, "<<  NAND INFO  >>\n");
+		result += sprintf(buffer + result, "flash id\t =%X\n",
 				nand_info->flash_id);
-	result += sprintf(buffer + result, "vendor\t\t =%s\n",
+		result += sprintf(buffer + result, "vendor\t\t =%s\n",
 				nand_info->maker_name);
-	result += sprintf(buffer + result, "width\t\t =%d bits\n",
+		result += sprintf(buffer + result, "width\t\t =%d bits\n",
 				nand_info->width);
-	result += sprintf(buffer + result, "size\t\t =%d MB\n",
+		result += sprintf(buffer + result, "size\t\t =%d MB\n",
 				nand_info->size>>20);
-	result += sprintf(buffer + result, "block count\t =%d\n",
+		result += sprintf(buffer + result, "block count\t =%d\n",
 				nand_info->block_count);
-	result += sprintf(buffer + result, "page count\t =%d",
+		result += sprintf(buffer + result, "page count\t =%d",
 				nand_info->page_count);
+	} else {
+		result += sprintf(buffer, "No NAND Flash\n");
+	}
 	return result;
 }
 module_param_call(info, NULL, param_get_nand_info, NULL, S_IRUGO);

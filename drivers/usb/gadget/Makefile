@@ -64,4 +64,5 @@ obj-$(CONFIG_USB_ANDROID_MTP)	+= f_mtp.o
 
 # MSM specific
 obj-$(CONFIG_USB_ANDROID_DIAG)	+= diag.o
-
+obj-$(CONFIG_QCT_LTE) +=  diag_hdlc.o
+obj-$(CONFIG_USB_HUB)	+= smsc251x.o

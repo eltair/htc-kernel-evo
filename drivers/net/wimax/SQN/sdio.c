@@ -62,6 +62,7 @@ extern int mmc_wimax_power(int on);
 extern void mmc_wimax_set_carddetect(int val);
 extern int mmc_wimax_uart_switch(int uart);
 extern int mmc_wimax_set_status(int on);
+extern int mmc_wimax_get_hostwakeup_gpio(void);
 
 /*******************************************************************/
 /* TX handlers                                                     */
@@ -595,6 +596,9 @@ out:
 		mdelay(5);
 		mmc_wimax_power(1);
         
+		// To avoid re-initialized SDIO card failed
+		priv->removed = 1;
+
 		sqn_pr_err("card seems to be dead/removed - initiate reinitialization\n");
 		mmc_detect_change(card->func->card->host, 1);
 	}
@@ -1401,8 +1405,9 @@ static int sqn_sdio_probe(struct sdio_func *func,
 	if (0 == sqn_card->rstn_wr_fifo_flag)
 		sqn_pr_warn("FW is still not started, anyway continue as is...\n");
 
-    sqn_pr_info("setup GPIO40 for wakeup form SQN1210\n"); 
-    rv = irq = MSM_GPIO_TO_INT(40); //GPIO_40 as wakeup 
+	
+    sqn_pr_info("setup GPIO%d for wakeup form SQN1210\n", mmc_wimax_get_hostwakeup_gpio()); 
+    rv = irq = MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()); //HOST WAKEUP GPIO as wakeup 
 
     if (rv < 0) { 
         sqn_pr_warn("wimax-gpio to irq failed\n"); 
@@ -1416,8 +1421,8 @@ static int sqn_sdio_probe(struct sdio_func *func,
         goto disable; 
     } 
  
-    sqn_pr_dbg("disable GPIO40 interrupt\n"); 
-    disable_irq(MSM_GPIO_TO_INT(40)); 
+    sqn_pr_dbg("disable GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio()); 
+    disable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio())); 
 
 	rv = init_thp(priv->dev);
 	if (rv)
@@ -1477,8 +1482,8 @@ static void sqn_sdio_remove(struct sdio_func *func)
 
 	sqn_pr_enter();
 
-	sqn_pr_info("free GPIO40 interrupt\n"); 
-	free_irq(MSM_GPIO_TO_INT(40),sqn_card->priv->dev);
+	sqn_pr_info("free GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio()); 
+	free_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()),sqn_card->priv->dev);
 
 #if defined(DEBUG)
 	sqn_sdio_print_debug_info(func);
@@ -1577,9 +1582,9 @@ int sqn_sdio_suspend(struct sdio_func *func, pm_message_t msg)
 out:
 
 	if (!sqn_is_gpio_irq_enabled) {
-		sqn_pr_info("enable GPIO40 interrupt\n");
-		enable_irq(MSM_GPIO_TO_INT(40));
-		enable_irq_wake(MSM_GPIO_TO_INT(40));
+		sqn_pr_info("enable GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio());
+		enable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
+		enable_irq_wake(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
 		sqn_is_gpio_irq_enabled = 1;
 	}
 
@@ -1607,9 +1612,9 @@ int sqn_sdio_resume(struct sdio_func *func)
 	/* sqn_notify_host_wakeup(func); */
 
 	if (sqn_is_gpio_irq_enabled) {
-		sqn_pr_info("disable GPIO40 interrupt\n");
-		disable_irq_wake(MSM_GPIO_TO_INT(40));
-		disable_irq(MSM_GPIO_TO_INT(40));
+		sqn_pr_info("disable GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio());
+		disable_irq_wake(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
+		disable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
 		sqn_is_gpio_irq_enabled = 0;
 	}
 

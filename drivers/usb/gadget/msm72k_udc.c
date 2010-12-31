@@ -49,6 +49,7 @@
 #ifdef CONFIG_USB_ACCESSORY_DETECT_BY_ADC
 #include <mach/htc_headset_mgr.h>
 #endif
+#include <mach/clk.h>
 
 static const char driver_name[] = "msm72k_udc";
 
@@ -1545,6 +1546,18 @@ static void usb_start(struct usb_info *ui)
 
 	spin_lock_irqsave(&ui->lock, flags);
 	ui->flags |= USB_FLAG_START;
+/*if msm_hsusb_set_vbus_state set 1, but usb did not init, the ui =NULL, */
+/*it would cause reboot with usb, it did not swith to USB and ADB fail*/
+/*So when USB start, check again*/
+	if (vbus) {
+		ui->flags |= USB_FLAG_VBUS_ONLINE;
+	} else {
+		ui->flags |= USB_FLAG_VBUS_OFFLINE;
+	}
+	/* online->switch to USB, offline->switch to uart */
+	if (ui->usb_uart_switch)
+		ui->usb_uart_switch(!vbus);
+
 	queue_work(ui->usb_wq, &ui->work);
 	spin_unlock_irqrestore(&ui->lock, flags);
 }
@@ -1616,7 +1629,7 @@ static void usb_lpm_exit(struct usb_info *ui)
 	if (!ui->in_lpm)
 		return;
 	printk(KERN_INFO "usb: lpm exit\n");
-	clk_set_rate(ui->ebi1clk, 128000000);
+	clk_set_rate(ui->ebi1clk, acpuclk_get_max_axi_rate());
 	udelay(10);
 	if (ui->coreclk)
 		clk_enable(ui->coreclk);

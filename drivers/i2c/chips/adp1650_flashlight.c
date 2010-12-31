@@ -204,7 +204,7 @@ int adp1650_flashlight_control(int mode)
 		break;
 
 	case FL_MODE_FLASH:
-		flash_light(CUR_FL_700MA, TIMER_200MS);
+		flash_light(CUR_FL_700MA, TIMER_600MS);
 		break;
 
 	case FL_MODE_PRE_FLASH:

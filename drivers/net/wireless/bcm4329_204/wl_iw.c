@@ -785,7 +785,13 @@ wl_iw_del_pfn(
 		return 0;
 	}
 
-	strncpy(ssid, extra + ssid_offset+1,
+	if (ssid_size > 32) {
+		WL_ERROR(("%s: ssid too long: %s\n", __FUNCTION__,
+					(char *)extra + ssid_offset + 1));
+		return 0;
+	}
+
+	strncpy(ssid, extra + ssid_offset + 1,
 			MIN(ssid_size, sizeof(ssid)));
 
 	WL_ERROR(("%s: remove ssid: %s\n", __FUNCTION__, ssid));
@@ -911,7 +917,7 @@ static int btcoex_dhcp_timer_start(struct net_device *dev)
 	char buf_reg41va_dhcp_on[8] = { 41, 00, 00, 00, 0x33, 0x00, 0x00, 0x00 };
 	char buf_reg68va_dhcp_on[8] = { 68, 00, 00, 00, 0x90, 0x01, 0x00, 0x00 };
 	char buf_reg12va_sco_time[4] = { 12, 0, 0, 0};
-	int sco_lasttime;
+	int sco_lasttime = 0;
 	int ret;
 
 	bcm_mkiovar("btc_params", (char*)&buf_reg12va_sco_time[0], sizeof(buf_reg12va_sco_time), ioctlbuf, sizeof(ioctlbuf));
@@ -6766,10 +6772,10 @@ static int wl_iw_set_priv(
 		/*  DD: we ignore command here. due to BCM embedded coexisted behavior
 		 *	in "POWERMODE" command.
 		 */
-/*
+		/*
 		else if (strnicmp(extra, "BTCOEXMODE", strlen("BTCOEXMODE")) == 0)
 			ret = wl_iw_set_btcoex_dhcp(dev, info, (union iwreq_data *)dwrq, extra);
-*/
+		*/
 		else if (strnicmp(extra, "GETPOWER", strlen("GETPOWER")) == 0)
 			ret = wl_iw_get_power_mode(dev, info, (union iwreq_data *)dwrq, extra);
 		else if (strnicmp(extra, "WIFICALL", strlen("WIFICALL")) == 0)

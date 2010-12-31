@@ -30,8 +30,10 @@ I2C_CLIENT_INSMOD_1(tps65200);
 
 static int tps65200_probe(struct i2c_client *client,
 			const struct i2c_device_id *id);
+#if 0
 static int tps65200_detect(struct i2c_client *client, int kind,
 			 struct i2c_board_info *info);
+#endif
 static int tps65200_remove(struct i2c_client *client);
 
 
@@ -173,7 +175,6 @@ static int tps65200_i2c_read_byte(u8 *value, u8 reg)
 int tps_set_charger_ctrl(u32 ctl)
 {
 	int result = 0;
-	u8 version;
 	u8 status;
 	u8 regh;
 
@@ -189,13 +190,14 @@ int tps_set_charger_ctrl(u32 ctl)
 		pr_info("Switch charger ON (SLOW)\n");
 		tps65200_i2c_write_byte(0x29, 0x01);
 		tps65200_i2c_write_byte(0x2A, 0x00);
-		tps65200_i2c_write_byte(0x86, 0x03);
+		tps65200_i2c_write_byte(0x83, 0x03);
+		tps65200_i2c_write_byte(0x63, 0x02);
 		break;
 	case ENABLE_FAST_CHG:
 		pr_info("Switch charger ON (FAST)\n");
 		tps65200_i2c_write_byte(0x29, 0x01);
 		tps65200_i2c_write_byte(0x2A, 0x00);
-		tps65200_i2c_write_byte(0x86, 0x03);
+		tps65200_i2c_write_byte(0x83, 0x03);
 		tps65200_i2c_write_byte(0xA3, 0x02);
 		tps65200_i2c_read_byte(&regh, 0x01);
 		pr_info("1.batt: Switch charger ON (FAST): regh 0x01=%x\n", regh);
@@ -224,6 +226,22 @@ int tps_set_charger_ctrl(u32 ctl)
 		tps65200_i2c_read_byte(&status, 0x09);
 		pr_info("TPS65200 INT2 %x\n", status);
 		break;
+	case OVERTEMP_VREG_4060:
+		pr_info("Switch charger OVERTEMP_VREG_4060 \n");
+		tps65200_i2c_read_byte(&regh, 0x02);
+		regh = (regh & 0xC0) | 0x1C;
+		tps65200_i2c_write_byte(regh, 0x02);
+		tps65200_i2c_read_byte(&regh, 0x02);
+		pr_info("Switch charger OVERTEMP_VREG_4060: regh 0x02=%x\n", regh);
+		break;
+	case NORMALTEMP_VREG_4200:
+		pr_info("Switch charger NORMALTEMP_VREG_4200 \n");
+		tps65200_i2c_read_byte(&regh, 0x02);
+		regh = (regh & 0xC0) | 0X23;
+		tps65200_i2c_write_byte(regh, 0x02);
+		tps65200_i2c_read_byte(&regh, 0x02);
+		pr_info("Switch charger NORMALTEMP_VREG_4200: regh 0x02=%x\n", regh);
+		break;
 	default:
 		pr_info("%s: Not supported battery ctr called.!", __func__);
 		result = -EINVAL;
@@ -247,6 +265,7 @@ static struct notifier_block cable_status_handler = {
 	.notifier_call = cable_status_handler_func,
 };
 
+#if 0
 static int tps65200_detect(struct i2c_client *client, int kind,
 			 struct i2c_board_info *info)
 {
@@ -259,6 +278,7 @@ static int tps65200_detect(struct i2c_client *client, int kind,
 
 	return 0;
 }
+#endif
 
 static int tps65200_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
@@ -282,7 +302,6 @@ static int tps65200_probe(struct i2c_client *client,
 static int tps65200_remove(struct i2c_client *client)
 {
 	struct tps65200_i2c_client   *data = i2c_get_clientdata(client);
-	int idx;
 	if (data->client && data->client != client)
 		i2c_unregister_device(data->client);
 	tps65200_i2c_module.client = NULL;

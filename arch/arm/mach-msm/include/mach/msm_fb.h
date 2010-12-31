@@ -31,13 +31,11 @@ struct mddi_info;
 #define MSM_MDP_PANEL_FLIP_UD			(1 << 1)
 #define MSM_MDP_PANEL_FLIP_LR			(1 << 2)
 #define MSM_MDP4_MDDI_DMA_SWITCH		(1 << 3)
+#define MSM_MDP_DMA_PACK_ALIGN_LSB		(1 << 4)
 
 /* mddi type */
 #define MSM_MDP_MDDI_TYPE_I	 0
 #define MSM_MDP_MDDI_TYPE_II	 1
-
-/* lcdc override operations */
-#define MSM_MDP_LCDC_DMA_PACK_ALIGN_LSB		(1 << 0)
 
 struct msm_fb_data {
 	int xres;	/* x resolution in pixels */
@@ -198,7 +196,6 @@ struct msm_lcdc_platform_data {
 	int				fb_id;
 	struct msm_fb_data		*fb_data;
 	struct resource			*fb_resource;
-	unsigned			 overrides;
 };
 
 struct msm_tvenc_platform_data {
@@ -211,6 +208,8 @@ struct msm_tvenc_platform_data {
 
 struct mdp_blit_req;
 struct fb_info;
+struct mdp_overlay;
+struct msmfb_overlay_data;
 struct mdp_device {
 	struct device dev;
 	void (*dma)(struct mdp_device *mdp, uint32_t addr,
@@ -227,7 +226,7 @@ struct mdp_device {
 	int (*overlay_unset)(struct mdp_device *mdp, struct fb_info *fb,
 		    int ndx);
 	int (*overlay_play)(struct mdp_device *mdp, struct fb_info *fb,
-		    struct msmfb_overlay_data *req, struct file *p_src_file);
+		    struct msmfb_overlay_data *req, struct file **p_src_file);
 #endif
 	void (*set_grp_disp)(struct mdp_device *mdp, uint32_t disp_id);
 	void (*configure_dma)(struct mdp_device *mdp);

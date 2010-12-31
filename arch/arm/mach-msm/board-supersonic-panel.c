@@ -205,7 +205,7 @@ struct s1d_regs {
 	unsigned val;
 } s1d13775_init_seq[] = {
 	{0x001C, 0x1500},
-	{0x0020, 0x3047},
+	{0x0020, 0x3043},
 	{0x0024, 0x401A},
 	{0x0028, 0x031A},
 	{0x002C, 0x0001},
@@ -240,7 +240,7 @@ struct s1d_regs {
 	{0x028C, 0x0001},
 	{0x0294, 0x0000},
 	{0x0400, 0x8000},
-	{0x0404, 0x1001},
+	{0x0404, 0x10C8},
 	{0x0480, 0x0001},
 	{0x0500, 0x0000},
 	{0x0504, 0x0011},
@@ -662,11 +662,18 @@ supersonic_panel_unblank(struct msm_mddi_bridge_platform_data *bridge_data,
 	B(KERN_DEBUG "%s\n", __func__);
 	if (panel_type == PANEL_AUO) {
 		suc_backlight_switch(LED_FULL);
+		client_data->remote_write(client_data, 0x01, 0xB101);
+		client_data->remote_write(client_data, 0x82, 0xB102);
+		client_data->remote_write(client_data, 0x5A, 0xB107);
+		client_data->remote_write(client_data, 0x00, 0x4400);
+		client_data->remote_write(client_data, 0xC8, 0x4401);
 		client_data->remote_write(client_data, 0x00, 0x2900);
 		msleep(100);
 		client_data->remote_write(client_data, 0x24, 0x5300);
 	} else {
 		suc_backlight_switch(LED_FULL);
+		client_data->remote_write(client_data, 0x3043, 0x0020);
+		client_data->remote_write(client_data, 0x10C8, 0x0404);
 		client_data->remote_write(client_data, 0x4000, 0x0600);
 		msleep(10);
 		qspi_send_9bit(0x0, 0x29);

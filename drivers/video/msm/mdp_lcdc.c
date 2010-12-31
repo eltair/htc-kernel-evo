@@ -103,7 +103,6 @@ static int lcdc_blank(struct msm_panel_data *fb_panel)
 
 static int lcdc_suspend(struct msm_panel_data *fb_panel)
 {
-	int status;
 	struct mdp_lcdc_info *lcdc = panel_to_lcdc(fb_panel);
 	struct msm_lcdc_panel_ops *panel_ops = lcdc->pdata->panel_ops;
 
@@ -111,8 +110,7 @@ static int lcdc_suspend(struct msm_panel_data *fb_panel)
 
 #if defined(CONFIG_ARCH_MSM7227)
 	writel(0x0, LCDC_MUX_CTL);
-	status = readl(LCDC_MUX_CTL);
-	D("suspend_lcdc_mux_ctl = %x\n", status);
+	D("suspend_lcdc_mux_ctl = %x\n", readl(LCDC_MUX_CTL));
 #endif
 	mdp_writel(lcdc->mdp, 0, MDP_LCDC_EN);
 	clk_disable(lcdc->pad_pclk);
@@ -126,7 +124,6 @@ static int lcdc_suspend(struct msm_panel_data *fb_panel)
 
 static int lcdc_resume(struct msm_panel_data *fb_panel)
 {
-	unsigned int status;
 	struct mdp_lcdc_info *lcdc = panel_to_lcdc(fb_panel);
 	struct msm_lcdc_panel_ops *panel_ops = lcdc->pdata->panel_ops;
 
@@ -142,8 +139,7 @@ static int lcdc_resume(struct msm_panel_data *fb_panel)
 	clk_enable(lcdc->pad_pclk);
 #if defined(CONFIG_ARCH_MSM7227)
 	writel(0x1, LCDC_MUX_CTL);
-	status = readl(LCDC_MUX_CTL);
-	D("resume_lcdc_mux_ctl = %x\n",status);
+	D("resume_lcdc_mux_ctl = %x\n", readl(LCDC_MUX_CTL));
 #endif
 
 	mdp_writel(lcdc->mdp, 1, MDP_LCDC_EN);
@@ -190,7 +186,7 @@ static int lcdc_hw_init(struct mdp_lcdc_info *lcdc)
 	mdp_writel(lcdc->mdp, 0, MDP_DMA_P_OUT_XY);
 
 	dma_cfg = mdp_readl(lcdc->mdp, MDP_DMA_P_CONFIG);
-	if (lcdc->pdata->overrides & MSM_MDP_LCDC_DMA_PACK_ALIGN_LSB)
+	if (lcdc->mdp->mdp_dev.overrides & MSM_MDP_DMA_PACK_ALIGN_LSB)
 		dma_cfg &= ~DMA_PACK_ALIGN_MSB;
 	else
 		dma_cfg |= DMA_PACK_ALIGN_MSB;
@@ -255,6 +251,37 @@ static void lcdc_frame_start(struct msmfb_callback *cb)
 	wake_up(&lcdc->vsync_waitq);
 }
 
+#ifdef CONFIG_MSM_MDP40
+static void lcdc_overlay_start(void *priv, uint32_t addr, uint32_t stride,
+			   uint32_t width, uint32_t height, uint32_t x,
+			   uint32_t y)
+{
+	struct mdp_info *mdp = container_of(mdp_dev, struct mdp_info, mdp_dev);
+
+	struct mdp4_overlay_pipe *pipe;
+	pipe = lcdc_pipe;
+	pipe->srcp0_addr = addr;
+
+	if (mdp->dma_config_dirty)
+	{
+		if(mdp->dma_format == DMA_IBUF_FORMAT_RGB565) {
+			pipe->src_format = MDP_RGB_565;
+			pipe->srcp0_ystride = pipe->src_width * 2;
+		} else if(mdp->dma_format == DMA_IBUF_FORMAT_XRGB8888) {
+			pipe->src_format = MDP_RGBA_8888;
+			pipe->srcp0_ystride = pipe->src_width * 4;
+		}
+		mdp4_overlay_format2pipe(pipe);
+		mdp4_overlay_dmap_xy(pipe);
+		mdp4_overlay_dmap_cfg(pipe, 1);
+		mdp4_overlayproc_cfg(pipe);
+		mdp->dma_config_dirty = false;
+	}
+	mdp4_overlay_rgb_setup(pipe);
+	mdp4_overlay_reg_flush(pipe, 1); /* rgb1 and mixer0 */
+
+}
+#else
 static void lcdc_dma_start(void *priv, uint32_t addr, uint32_t stride,
 			   uint32_t width, uint32_t height, uint32_t x,
 			   uint32_t y)
@@ -271,36 +298,8 @@ static void lcdc_dma_start(void *priv, uint32_t addr, uint32_t stride,
 	mdp_writel(lcdc->mdp, stride, MDP_DMA_P_IBUF_Y_STRIDE);
 	mdp_writel(lcdc->mdp, addr, MDP_DMA_P_IBUF_ADDR);
 }
-
-#ifdef CONFIG_MSM_MDP40
-static void lcdc_overlay_start(void *priv, uint32_t addr, uint32_t stride,
-			   uint32_t width, uint32_t height, uint32_t x,
-			   uint32_t y)
-{
-	struct mdp_lcdc_info *lcdc = priv;
-	struct mdp_info *mdp = container_of(mdp_dev, struct mdp_info, mdp_dev);
-
-	struct mdp4_overlay_pipe *pipe;
-	pipe = lcdc_pipe;
-	pipe->srcp0_addr = addr;
-
-	if (mdp->dma_config_dirty)
-	{
-		if(mdp->format == DMA_IBUF_FORMAT_RGB565) {
-			pipe->src_format = MDP_RGB_565;
-			pipe->srcp0_ystride = pipe->src_width * 2;
-		} else if(mdp->format == DMA_IBUF_FORMAT_XRGB8888) {
-			pipe->src_format = MDP_RGBA_8888;
-			pipe->srcp0_ystride = pipe->src_width * 4;
-		}
-		mdp4_overlay_format2pipe(pipe);
-		mdp->dma_config_dirty = false;
-	}
-	mdp4_overlay_rgb_setup(pipe);
-	mdp4_overlay_reg_flush(pipe, 1); /* rgb1 and mixer0 */
-
-}
 #endif
+
 static void precompute_timing_parms(struct mdp_lcdc_info *lcdc)
 {
 	struct msm_lcdc_timing *timing = lcdc->pdata->timing;
@@ -414,6 +413,8 @@ static int mdp_lcdc_probe(struct platform_device *pdev)
 	if (lcdc_pipe == NULL) {
 		ptype = mdp4_overlay_format2type(MDP_RGB_565);
 		pipe = mdp4_overlay_pipe_alloc(ptype);
+		if (!pipe)
+			goto err_mdp4_overlay_pipe_alloc;
 		pipe->mixer_stage  = MDP4_MIXER_STAGE_BASE;
 		pipe->mixer_num  = MDP4_MIXER0;
 		pipe->src_format = MDP_RGB_565;
@@ -434,15 +435,8 @@ static int mdp_lcdc_probe(struct platform_device *pdev)
 	pipe->srcp0_addr = (uint32_t) lcdc->fb_start;
 	pipe->srcp0_ystride = pdata->fb_data->xres * 2;
 
-	mdp4_overlay_dmap_xy(pipe);
-	mdp4_overlay_dmap_cfg(pipe, 1);
-
 	mdp4_overlay_rgb_setup(pipe);
-
 	mdp4_mixer_stage_up(pipe);
-
-	mdp4_overlayproc_cfg(pipe);
-	mdp4_overlay_reg_flush(pipe, 1);
 #endif
 
 	lcdc->fb_panel_data.suspend = lcdc_suspend;
@@ -480,6 +474,7 @@ static int mdp_lcdc_probe(struct platform_device *pdev)
 
 err_plat_dev_reg:
 err_hw_init:
+err_mdp4_overlay_pipe_alloc:
 	platform_set_drvdata(pdev, NULL);
 	clk_put(lcdc->pad_pclk);
 err_get_pad_pclk:

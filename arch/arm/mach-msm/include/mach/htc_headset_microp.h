@@ -43,6 +43,7 @@ struct htc_headset_microp_info {
 	struct htc_headset_microp_platform_data pdata;
 	int hpin_gpio_mask;
 	unsigned int hpin_debounce;
+	struct wake_lock hs_wake_lock;
 };
 
 #endif

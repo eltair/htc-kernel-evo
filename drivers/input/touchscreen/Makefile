@@ -29,6 +29,7 @@ obj-$(CONFIG_TOUCHSCREEN_HTCPEN)	+= htcpen.o
 obj-$(CONFIG_TOUCHSCREEN_USB_COMPOSITE)	+= usbtouchscreen.o
 obj-$(CONFIG_TOUCHSCREEN_PENMOUNT)	+= penmount.o
 obj-$(CONFIG_TOUCHSCREEN_MSM)		+= msm_ts.o
+obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_3K)       += synaptics_3k.o
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI)	+= synaptics_i2c_rmi.o
 obj-$(CONFIG_TOUCHSCREEN_SYNAPTICS_T1021)       += synaptics_t1021.o
 obj-$(CONFIG_TOUCHSCREEN_ATMEL) += atmel.o

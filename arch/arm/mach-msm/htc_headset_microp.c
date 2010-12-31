@@ -178,6 +178,7 @@ static irqreturn_t htc_headset_microp_detect_irq(int irq, void *data)
 
 	DBG_MSG();
 
+	wake_lock_timeout(&hi->hs_wake_lock, HS_WAKE_LOCK_TIMEOUT);
 	queue_delayed_work(detect_wq, &detect_microp_work, hi->hpin_debounce);
 
 	return IRQ_HANDLED;
@@ -187,6 +188,7 @@ static irqreturn_t htc_headset_microp_button_irq(int irq, void *data)
 {
 	DBG_MSG();
 
+	wake_lock_timeout(&hi->hs_wake_lock, HS_WAKE_LOCK_TIMEOUT);
 	queue_work(button_wq, &button_microp_work);
 
 	return IRQ_HANDLED;
@@ -258,6 +260,8 @@ static int htc_headset_microp_probe(struct platform_device *pdev)
 
 	hi->hpin_debounce = HS_JIFFIES_INSERT;
 
+	wake_lock_init(&hi->hs_wake_lock, WAKE_LOCK_SUSPEND, DRIVER_NAME);
+
 	if (hi->pdata.hpin_int) {
 		hi->hpin_gpio_mask = pdata->hpin_mask[0] << 16 |
 				     pdata->hpin_mask[1] << 8 |
@@ -293,7 +297,7 @@ static int htc_headset_microp_probe(struct platform_device *pdev)
 				  "HTC_HEADSET_MICROP_BUTTON", NULL);
 		if (ret < 0) {
 			ret = -EINVAL;
-			SYS_MSG("Failed to request Micro-P IRQ (ERROR %d)",
+			SYS_MSG("Failed to request Micro-P HPIN IRQ (ERR %d)",
 				ret);
 			goto err_request_microp_detect_irq;
 		}
@@ -328,13 +332,18 @@ static int htc_headset_microp_probe(struct platform_device *pdev)
 				  "HTC_HEADSET_MICROP_BUTTON", NULL);
 		if (ret < 0) {
 			ret = -EINVAL;
-			SYS_MSG("Failed to request Micro-P IRQ (ERROR %d)",
+			SYS_MSG("Failed to request Micro-P button IRQ (ERR %d)",
 				ret);
 			goto err_request_microp_button_irq;
 		}
 	}
 
 	hs_microp_register();
+	hs_notify_driver_ready(DRIVER_NAME);
+
+	if (hi->pdata.hpin_int)
+		queue_delayed_work(detect_wq, &detect_microp_work,
+				   hi->hpin_debounce);
 
 	SYS_MSG("--------------------");
 

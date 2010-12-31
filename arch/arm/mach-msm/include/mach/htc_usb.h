@@ -14,12 +14,15 @@
 #ifndef __ASM_ARCH_MSM_HTC_USB_H
 #define __ASM_ARCH_MSM_HTC_USB_H
 
-#ifdef CONFIG_USB_ANDROID
-#include <linux/usb/android_composite.h>
-
 #ifdef CONFIG_ARCH_QSD8X50
 void msm_hsusb_8x50_phy_reset(void);
 #endif
+
+#ifdef CONFIG_USB_ANDROID
+#ifdef ERROR
+#undef ERROR
+#endif
+#include <linux/usb/android_composite.h>
 
 static char *usb_functions_ums[] = {
 	"usb_mass_storage",

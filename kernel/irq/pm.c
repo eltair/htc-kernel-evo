@@ -9,6 +9,7 @@
 #include <linux/irq.h>
 #include <linux/module.h>
 #include <linux/interrupt.h>
+#include <linux/resume-trace.h>
 
 #include "internals.h"
 
@@ -73,8 +74,11 @@ int check_wakeup_irqs(void)
 	int irq;
 
 	for_each_irq_desc(irq, desc)
-		if ((desc->status & IRQ_WAKEUP) && (desc->status & IRQ_PENDING))
+		if ((desc->status & IRQ_WAKEUP) && (desc->status & IRQ_PENDING)) {
+			TRACE_MASK(TRACE_PM_WARN,
+				"%s: %d is wakeup irq and pending\n", __func__, irq);
 			return -EBUSY;
+		}
 
 	return 0;
 }

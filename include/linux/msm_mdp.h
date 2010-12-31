@@ -42,8 +42,10 @@ enum {
 	MDP_RGBA_8888,    // ARGB 888
 	MDP_BGRA_8888,    // ARGB 888
 	MDP_RGBX_8888,    // RGBX 888
+#ifdef CONFIG_MSM_MDP40
 	MDP_Y_CRCB_H2V2_TILE,  /* Y and CrCb, pseudo planer tile */
 	MDP_Y_CBCR_H2V2_TILE,  /* Y and CbCr, pseudo planer tile */
+#endif
 	MDP_IMGTYPE_LIMIT, // Non valid image type after this enum
 	MDP_IMGTYPE2_START = 0x10000,
 	MDP_BGR_565 = MDP_IMGTYPE2_START,      /* BGR 565 planer */

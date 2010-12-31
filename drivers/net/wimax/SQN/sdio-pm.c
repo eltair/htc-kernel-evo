@@ -784,7 +784,6 @@ static void sqn_handle_android_early_suspend(struct early_suspend *h)
 		sqn_pr_info("enable GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio());
 		enable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
 		enable_irq_wake(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
-
 		sqn_is_gpio_irq_enabled = 1;
 	}
 
@@ -799,7 +798,7 @@ static void sqn_handle_android_late_resume(struct early_suspend *h)
 	sqn_pr_info("%s: enter\n", __func__);
 
 	if (sqn_is_gpio_irq_enabled) {
-		sqn_pr_info("disable GPIO%d interrupt\n", (mmc_wimax_get_hostwakeup_gpio()));
+		sqn_pr_info("disable GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio());
 		disable_irq_wake(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
 		disable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
 		sqn_is_gpio_irq_enabled = 0;

@@ -34,20 +34,18 @@
 
 struct spi_device        *spidev;
 
-extern int samsung_oled_panel_init(struct msm_lcdc_panel_ops *ops);
 int qspi_send_16bit(unsigned char id, unsigned data)
 {
-	unsigned char buffer[4];
+	unsigned char buffer[2];
 	int tmp;
 	tmp = (id<<13 | data)<<16;
 
 	buffer[0] = tmp >> 24;
 	buffer[1] = (tmp & 0x00FF0000) >> 16;
-	buffer[2] = (tmp & 0x0000FF00) >> 8;
-	buffer[3] = tmp & 0x000000FF;
-	spi_write(spidev,buffer,4);
+	spi_write(spidev,buffer, 2);
 	return 0;
 }
+
 int qspi_send_9bit(struct spi_msg *msg)
 {
 	int tmp = 0;
@@ -95,7 +93,7 @@ static int msm_spi_probe(struct spi_device *spi)
 	return 0 ;
 }
 
-static int msm_spi_remove(struct platform_device *pdev)
+static int msm_spi_remove(struct spi_device *pdev)
 {
 	spidev = NULL;
 	return 0;
@@ -108,7 +106,7 @@ static struct spi_driver spi_qsd = {
 		.owner = THIS_MODULE,
 	},
 	.probe         = msm_spi_probe,
-	.remove        = __devexit_p(msm_spi_remove),
+	.remove        = msm_spi_remove,
 };
 
 
@@ -245,30 +243,12 @@ static int __devexit msm_spi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int msm_spi_suspend(struct platform_device *pdev, pm_message_t state)
-{
-	printk("+%s()\n", __FUNCTION__);
-	clk_disable(spi_clk);
-	return 0 ;
-}
-
-static int msm_spi_resume(struct platform_device *pdev)
-{
-	printk("+%s()\n", __FUNCTION__);
-	clk_enable(spi_clk);
-	return 0 ;
-}
-
 static struct platform_driver msm_spi_driver = {
 	.probe          = msm_spi_probe,
 	.driver		= {
 		.name	= "spi_qsd",
 		.owner	= THIS_MODULE,
 	},
-#if 0
-	.suspend        = msm_spi_suspend,
-	.resume         = msm_spi_resume,
-#endif
 	.remove		= __exit_p(msm_spi_remove),
 };
 

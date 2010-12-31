@@ -238,6 +238,12 @@ int mmc_add_card(struct mmc_card *card)
 	case MMC_TYPE_SDIO:
 		type = "SDIO";
 		break;
+	case MMC_TYPE_SDIO_WIMAX:
+		type = "SDIO(WiMAX)";
+		break;
+	case MMC_TYPE_SDIO_SVLTE:
+		type = "SDIO(SVLTE)";
+		break;
 	default:
 		type = "?";
 		break;

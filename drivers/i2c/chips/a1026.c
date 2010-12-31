@@ -554,7 +554,7 @@ int build_cmds(char* cmds, int newid)
 }
 int a1026_set_config(char newid, int mode)
 {
-	int i = 0, rc = 0, size = 0;
+	int rc = 0, size = 0;
 	int number_of_cmd_sets, rd_retry_cnt;
 	unsigned int sw_reset = 0;
 	unsigned char *i2c_cmds;
@@ -686,11 +686,14 @@ int a1026_set_config(char newid, int mode)
 	pr_info("%s: block write start (size = %d)\n", __func__, size);
 
 #if DEBUG
-        for (i = 1; i <= size; i++) {
-                pr_info("%x ", *(i2c_cmds + i - 1));
-                if ( !(i % 4))
-                        pr_info("\n");
-        }
+	{
+		int i = 0;
+		for (i = 1; i <= size; i++) {
+		pr_info("%x ", *(i2c_cmds + i - 1));
+			if ( !(i % 4))
+				pr_info("\n");
+	        }
+	}
 #endif
 
 	rc = a1026_i2c_write(i2c_cmds, size);
@@ -723,11 +726,14 @@ int a1026_set_config(char newid, int mode)
 	} else {
 		pr_info("%s: CMD ACK block read end\n", __func__);
 #if DEBUG
+	{
+		int i = 0;
 		for (i = 1; i <= size; i++) {
 			pr_info("%x ", ack_buf[i-1]);
 			if ( !(i % 4))
 				pr_info("\n");
 		}
+	}
 #endif
 		index = ack_buf;
 		number_of_cmd_sets = size / 4;
@@ -741,10 +747,13 @@ rd_retry:
 					if (rc < 0)
 						return rc;
 #if DEBUG
-					for (i = 0; i < sizeof(rdbuf); i++) {
-						pr_info("0x%x\n", rdbuf[i]);
+					{
+						int i = 0;
+						for (i = 0; i < sizeof(rdbuf); i++) {
+							pr_info("0x%x\n", rdbuf[i]);
+						}
+						pr_info("-----------------\n");
 					}
-					pr_info("-----------------\n");
 #endif
 					if (rdbuf[0] == 0x00) {
 						msleep(20);
@@ -896,7 +905,6 @@ a1026_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 	struct a1026img img;
 	struct A1026_config_data cfg;
 	int rc = 0;
-	int i = 0;
 #if ENABLE_DIAG_IOCTLS
 	char msg[4];
 	int mic_cases = 0;

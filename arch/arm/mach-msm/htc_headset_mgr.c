@@ -90,8 +90,27 @@ struct button_work {
 	int key_code;
 };
 
-static struct h2w_info *hi;
+static struct htc_headset_mgr_info *hi;
 static struct hs_notifier_func hs_mgr_notifier;
+
+static void init_next_driver(void)
+{
+	int i = hi->driver_init_seq;
+
+	if (!hi->pdata.headset_devices_num)
+		return;
+
+	if (i < hi->pdata.headset_devices_num) {
+		hi->driver_init_seq++;
+		platform_device_register(hi->pdata.headset_devices[i]);
+	}
+}
+
+void hs_notify_driver_ready(char *name)
+{
+	SYS_MSG("%s ready", name);
+	init_next_driver();
+}
 
 void hs_notify_hpin_irq(void)
 {
@@ -172,9 +191,11 @@ static int hs_mgr_rpc_call(struct msm_rpc_server *server,
 		args_key->adc = be32_to_cpu(args_key->adc);
 		SYS_MSG("RPC_SERVER_KEY ADC = %u (0x%X)",
 			args_key->adc, args_key->adc);
-		if (hs_mgr_notifier.rpc_key)
+		if (hs_mgr_notifier.rpc_key) {
+			wake_lock_timeout(&hi->hs_wake_lock,
+					  HS_WAKE_LOCK_TIMEOUT);
 			hs_mgr_notifier.rpc_key(args_key->adc);
-		else
+		} else
 			SYS_MSG("RPC_KEY notify function doesn't exist");
 		break;
 	default:
@@ -374,7 +395,6 @@ static void remove_35mm_do_work(struct work_struct *work)
 		state &= ~(BIT_35MM_HEADSET | BIT_HEADSET);
 		state |= BIT_HEADSET_NO_MIC;
 		switch_set_state(&hi->sdev, state);
-		mutex_unlock(&hi->mutex_lock);
 	} else if (hi->usb_dev_type == H2W_TVOUT) {
 		state &= ~(BIT_HEADSET | BIT_35MM_HEADSET);
 		state |= BIT_HEADSET_NO_MIC;
@@ -695,7 +715,7 @@ static ssize_t fm_flag_show(struct device *dev,
 }
 static DEVICE_ACCESSORY_ATTR(fm, 0666, fm_flag_show, fm_flag_store);
 
-static int register_common_headset(struct h2w_info *h2w, int create_attr)
+static int register_common_headset(struct htc_headset_mgr_info *h2w)
 {
 	int ret = 0;
 	hi = h2w;
@@ -748,7 +768,7 @@ err_create_class:
 	return ret;
 }
 
-static void unregister_common_headset(struct h2w_info *h2w)
+static void unregister_common_headset(struct htc_headset_mgr_info *h2w)
 {
 	hi = h2w;
 	device_remove_file(hi->tty_dev, &dev_attr_tty);
@@ -766,11 +786,18 @@ static int htc_35mm_probe(struct platform_device *pdev)
 
 	SYS_MSG("++++++++++++++++++++");
 
-	hi = kzalloc(sizeof(struct h2w_info), GFP_KERNEL);
+	hi = kzalloc(sizeof(struct htc_headset_mgr_info), GFP_KERNEL);
 	if (!hi)
 		return -ENOMEM;
 
-	hi->driver_flag = pdata->driver_flag;
+	hi->pdata.driver_flag = pdata->driver_flag;
+	hi->pdata.headset_devices_num = pdata->headset_devices_num;
+	hi->pdata.headset_devices = pdata->headset_devices;
+
+	hi->driver_init_seq = 0;
+
+	wake_lock_init(&hi->hs_wake_lock, WAKE_LOCK_SUSPEND, DRIVER_NAME);
+
 	hi->hpin_jiffies = jiffies;
 
 	hi->ext_35mm_status = 0;
@@ -836,11 +863,11 @@ static int htc_35mm_probe(struct platform_device *pdev)
 	if (ret < 0)
 	goto err_register_input_dev;
 
-	ret = register_common_headset(hi, 0);
+	ret = register_common_headset(hi);
 	if (ret)
 		goto err_register_common_headset;
 
-	if (hi->driver_flag & DRIVER_HS_MGR_RPC_SERVER) {
+	if (hi->pdata.driver_flag & DRIVER_HS_MGR_RPC_SERVER) {
 		/* Create RPC server */
 		ret = msm_rpc_create_server(&hs_rpc_server);
 		if (ret < 0) {
@@ -849,6 +876,8 @@ static int htc_35mm_probe(struct platform_device *pdev)
 		}
 		SYS_MSG("Create RPC server successfully");
 	}
+
+	hs_notify_driver_ready(DRIVER_NAME);
 
 	SYS_MSG("--------------------");
 

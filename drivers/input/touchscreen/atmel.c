@@ -66,6 +66,7 @@ struct atmel_ts_data {
 	uint8_t GCAF_sample;
 	uint8_t *GCAF_level;
 	uint8_t noisethr;
+	uint8_t diag_command;
 #ifdef ATMEL_EN_SYSFS
 	struct device dev;
 #endif
@@ -223,7 +224,7 @@ static ssize_t atmel_register_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
 	int ret = 0;
-	uint8_t ptr[1];
+	uint8_t ptr[1] = { 0 };
 	struct atmel_ts_data *ts_data;
 	ts_data = private_ts;
 	if (i2c_atmel_read(ts_data->client, atmel_reg_addr, ptr, 1) < 0) {
@@ -295,7 +296,7 @@ static ssize_t atmel_regdump_show(struct device *dev,
 	int count = 0, ret_t = 0;
 	struct atmel_ts_data *ts_data;
 	uint16_t loop_i;
-	uint8_t ptr[1];
+	uint8_t ptr[1] = { 0 };
 	ts_data = private_ts;
 	if (ts_data->id->version >= 0x14) {
 		for (loop_i = 230; loop_i <= 425; loop_i++) {
@@ -353,6 +354,73 @@ static ssize_t atmel_debug_level_dump(struct device *dev,
 
 static DEVICE_ATTR(debug_level, 0644, atmel_debug_level_show, atmel_debug_level_dump);
 
+static ssize_t atmel_diag_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct atmel_ts_data *ts_data;
+	size_t count = 0;
+	int8_t data[128];
+	uint8_t loop_i, loop_j;
+	int16_t rawdata;
+	int x, y;
+	ts_data = private_ts;
+	memset(data, 0x0, sizeof(data));
+
+	if (ts_data->diag_command != 0x10 && ts_data->diag_command != 0x11)
+		return count;
+
+	i2c_atmel_write_byte_data(ts_data->client,
+		get_object_address(ts_data, GEN_COMMANDPROCESSOR_T6) + 5,
+		ts_data->diag_command);
+
+	x = 16 + ts_data->config_setting[0].config_T28[2];
+	y = 14 - ts_data->config_setting[0].config_T28[2];
+	count += sprintf(buf, "Channel: %d * %d\n", x, y);
+
+	for (loop_i = 0; loop_i < 4; loop_i++) {
+		for (loop_j = 0; !(data[0] == ts_data->diag_command && data[1] == loop_i)
+			&& loop_j < 10; loop_j++) {
+			msleep(5);
+			i2c_atmel_read(ts_data->client, get_object_address(ts_data, DIAGNOSTIC_T37), data, 2);
+		}
+		if (loop_j == 10)
+			printk(KERN_ERR "%s: Diag data not ready\n", __func__);
+
+		i2c_atmel_read(ts_data->client, get_object_address(ts_data, DIAGNOSTIC_T37) + 2, data, 128);
+		for (loop_j = 0; loop_j < 127; loop_j += 2) {
+			if ((loop_i * 64 + loop_j / 2) >= (x * y)) {
+				count += sprintf(buf + count, "\n");
+				return count;
+			} else {
+			rawdata = data[loop_j+1] << 8 | data[loop_j];
+			count += sprintf(buf + count, "%5d", rawdata);
+			if (((loop_i * 64 + loop_j / 2) % y) == (y - 1))
+				count += sprintf(buf + count, "\n");
+			}
+		}
+		i2c_atmel_write_byte_data(ts_data->client,
+			get_object_address(ts_data, GEN_COMMANDPROCESSOR_T6) + 5, 0x01);
+
+	}
+
+	return count;
+}
+
+static ssize_t atmel_diag_dump(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct atmel_ts_data *ts_data;
+	ts_data = private_ts;
+	if (buf[0] == '1')
+		ts_data->diag_command = 0x10;
+	if (buf[0] == '2')
+		ts_data->diag_command = 0x11;
+
+	return count;
+}
+
+static DEVICE_ATTR(diag, 0644, atmel_diag_show, atmel_diag_dump);
+
 static struct kobject *android_touch_kobj;
 
 static int atmel_touch_sysfs_init(void)
@@ -386,6 +454,11 @@ static int atmel_touch_sysfs_init(void)
 		return ret;
 	}
 	ret = sysfs_create_file(android_touch_kobj, &dev_attr_debug_level.attr);
+	if (ret) {
+		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
+		return ret;
+	}
+	ret = sysfs_create_file(android_touch_kobj, &dev_attr_diag.attr);
 	if (ret) {
 		printk(KERN_ERR "%s: sysfs_create_file failed\n", __func__);
 		return ret;
@@ -454,18 +527,19 @@ static void check_calibration(struct atmel_ts_data*ts)
 	if (data[0] == 0xF3 && data[1] == 0x00) {
 		x_limit = 16 + ts->config_setting[0].config_T28[2];
 		x_limit = x_limit << 1;
-
-		for (loop_i = 0; loop_i < x_limit; loop_i += 2) {
-			for (loop_j = 0; loop_j < 8; loop_j++) {
-				check_mask = 1 << loop_j;
-				if (data[2 + loop_i] & check_mask)
-					tch_ch++;
-				if (data[3 + loop_i] & check_mask)
-					tch_ch++;
-				if (data[42 + loop_i] & check_mask)
-					atch_ch++;
-				if (data[43 + loop_i] & check_mask)
-					atch_ch++;
+		if (x_limit <= 40) {
+			for (loop_i = 0; loop_i < x_limit; loop_i += 2) {
+				for (loop_j = 0; loop_j < 8; loop_j++) {
+					check_mask = 1 << loop_j;
+					if (data[2 + loop_i] & check_mask)
+						tch_ch++;
+					if (data[3 + loop_i] & check_mask)
+						tch_ch++;
+					if (data[42 + loop_i] & check_mask)
+						atch_ch++;
+					if (data[43 + loop_i] & check_mask)
+						atch_ch++;
+				}
 			}
 		}
 	}
@@ -500,6 +574,8 @@ static void atmel_ts_work_func(struct work_struct *work)
 	uint8_t data[ts->finger_support * 9];
 
 	uint8_t loop_i, loop_j, report_type, msg_num, msg_byte_num = 8, finger_report;
+	memset(data, 0x0, sizeof(data));
+
 	msg_num = (ts->finger_count && ts->id->version >= 0x15)
 		? ts->finger_count : 1;
 
@@ -861,7 +937,7 @@ static int atmel_ts_probe(struct i2c_client *client,
 	printk(KERN_INFO "Touch: 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X\n",
 		data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
 
-	if (data[1] & 0x24) {
+	if (data[0] == 0x01 && (data[1] & 0x24)) {
 		printk(KERN_INFO "atmel_ts_probe(): init err: %x\n", data[1]);
 		goto err_detect_failed;
 	} else {
@@ -940,7 +1016,7 @@ static int atmel_ts_probe(struct i2c_client *client,
 			}
 			if (loop_i == 10)
 				printk(KERN_ERR "No Messages when check source\n");
-			for (loop_i = 0; loop_i < 10; loop_i++) {
+			for (loop_i = 0; loop_i < 100; loop_i++) {
 				i2c_atmel_read(ts->client, get_object_address(ts,
 					GEN_MESSAGEPROCESSOR_T5), data, 2);
 				if (data[0] == get_report_ids_size(ts, SPT_GPIOPWM_T19)) {

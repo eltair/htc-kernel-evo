@@ -84,6 +84,51 @@ extern void __init supersonic_audio_init(void);
 #ifdef CONFIG_MICROP_COMMON
 void __init supersonic_microp_init(void);
 #endif
+
+/* HTC_HEADSET_GPIO Driver */
+static struct htc_headset_gpio_platform_data htc_headset_gpio_data = {
+	.hpin_gpio		= SUPERSONIC_GPIO_35MM_HEADSET_DET,
+	.key_enable_gpio	= 0,
+	.mic_select_gpio	= 0,
+};
+
+static struct platform_device htc_headset_gpio = {
+	.name	= "HTC_HEADSET_GPIO",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &htc_headset_gpio_data,
+	},
+};
+
+/* HTC_HEADSET_MICROP Driver */
+static struct htc_headset_microp_platform_data htc_headset_microp_data = {
+	.remote_int		= 1 << 7,
+	.remote_irq		= MSM_uP_TO_INT(7),
+	.remote_enable_pin	= 0,
+	.adc_channel		= 0x01,
+	.adc_remote		= {0, 33, 50, 110, 160, 220},
+};
+
+static struct platform_device htc_headset_microp = {
+	.name	= "HTC_HEADSET_MICROP",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &htc_headset_microp_data,
+	},
+};
+
+/* HTC_HEADSET_MGR Driver */
+static struct platform_device *headset_devices[] = {
+	&htc_headset_microp,
+	&htc_headset_gpio,
+	/* Please put the headset detection driver on the last */
+};
+
+static struct htc_headset_mgr_platform_data htc_headset_mgr_data = {
+	.headset_devices_num	= ARRAY_SIZE(headset_devices),
+	.headset_devices	= headset_devices,
+};
+
 static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.gpio_mbat_in = SUPERSONIC_GPIO_MBAT_IN,
 	.gpio_mchg_en_n = SUPERSONIC_GPIO_MCHG_EN_N,
@@ -210,14 +255,6 @@ static struct capella_cm3602_platform_data capella_cm3602_pdata = {
 };
 /* End Proximity Sensor (Capella_CM3602)*/
 
-static struct htc_headset_microp_platform_data htc_headset_microp_data = {
-	.remote_int		= 1 << 7,
-	.remote_irq		= MSM_uP_TO_INT(7),
-	.remote_enable_pin	= NULL,
-	.adc_channel		= 0x01,
-	.adc_remote		= {0, 33, 50, 110, 160, 220},
-};
-
 static struct platform_device microp_devices[] = {
 	{
 		.name = "lightsensor_microp",
@@ -246,10 +283,10 @@ static struct platform_device microp_devices[] = {
 		},
 	},
 	{
-		.name	= "HTC_HEADSET_MICROP",
+		.name	= "HTC_HEADSET_MGR",
 		.id	= -1,
 		.dev	= {
-			.platform_data	= &htc_headset_microp_data,
+			.platform_data	= &htc_headset_mgr_data,
 		},
 	},
 };
@@ -693,7 +730,7 @@ struct atmel_i2c_platform_data supersonic_atmel_ts_data[] = {
 		.config_T6 = {0, 0, 0, 0, 0, 0},
 		.config_T7 = {50, 15, 50},
 		.config_T8 = {10, 0, 20, 10, 0, 0, 5, 0},
-		.config_T9 = {139, 0, 0, 18, 12, 0, 16, 32, 3, 5, 0, 5, 2, 14, 2, 10, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 143, 25, 146, 10, 20},
+		.config_T9 = {139, 0, 0, 18, 12, 0, 16, 32, 3, 5, 0, 5, 2, 14, 2, 10, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 143, 25, 146, 10, 40},
 		.config_T15 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		.config_T19 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		.config_T20 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -703,7 +740,7 @@ struct atmel_i2c_platform_data supersonic_atmel_ts_data[] = {
 		.config_T25 = {3, 0, 200, 50, 64, 31, 0, 0, 0, 0, 0, 0, 0, 0},
 		.config_T27 = {0, 0, 0, 0, 0, 0, 0},
 		.config_T28 = {0, 0, 2, 4, 8, 60},
-		.object_crc = {0x0D, 0x1C, 0x8E},
+		.object_crc = {0x63, 0x27, 0x8E},
 		.cable_config = {30, 30, 8, 16},
 		.GCAF_level = {20, 24, 28, 40, 63},
 		.filter_level = {46, 100, 923, 978},
@@ -808,31 +845,6 @@ static struct regulator_init_data tps65023_data[5] = {
 			.min_uV = 3300000,
 			.max_uV = 3300000,
 		},
-	},
-};
-
-static struct htc_headset_mgr_platform_data htc_headset_mgr_data = {
-};
-
-static struct platform_device htc_headset_mgr = {
-	.name	= "HTC_HEADSET_MGR",
-	.id	= -1,
-	.dev	= {
-		.platform_data	= &htc_headset_mgr_data,
-	},
-};
-
-static struct htc_headset_gpio_platform_data htc_headset_gpio_data = {
-	.hpin_gpio		= SUPERSONIC_GPIO_35MM_HEADSET_DET,
-	.key_enable_gpio	= NULL,
-	.mic_select_gpio	= NULL,
-};
-
-static struct platform_device htc_headset_gpio = {
-	.name	= "HTC_HEADSET_GPIO",
-	.id	= -1,
-	.dev	= {
-		.platform_data	= &htc_headset_gpio_data,
 	},
 };
 
@@ -1300,8 +1312,6 @@ static struct platform_device *devices[] __initdata = {
 	&msm_device_uart_dm1,
 #endif
 	&htc_battery_pdev,
-	&htc_headset_mgr,
-	&htc_headset_gpio,
 	&ram_console_device,
 	&supersonic_rfkill,
 	&msm_device_smd,
@@ -1373,7 +1383,7 @@ static struct msm_acpu_clock_platform_data supersonic_clock_data = {
 	.max_speed_delta_khz	= 256000,
 	.vdd_switch_time_us	= 62,
 	.power_collapse_khz	= 245000,
-	.wait_for_irq_khz	= 245000,
+	.wait_for_irq_khz	= 0,
 };
 
 static unsigned supersonic_perf_acpu_table[] = {

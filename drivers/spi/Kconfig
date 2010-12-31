@@ -176,7 +176,7 @@ config SPI_CRUCIAL_OJ
 
 config SPI_AIC3254
 	tristate "TI AIC3254 SPI support"
-        default y
+        default n
 	depends on ARCH_MSM7X30
 	help
 	  TI AIC3254 is external codec for audio RX

@@ -300,6 +300,32 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		if (mmc_bus_fails_resume(card->host))
 			return 0;
 		mmc_blk_set_blksize(md, card);
+
+		if (mmc_card_mmc(card)) {
+			struct mmc_command cmd;
+			int retries = 3;
+			do {
+				int err;
+
+				cmd.opcode = MMC_SEND_STATUS;
+				cmd.arg = mq->card->rca << 16;
+				cmd.flags = MMC_RSP_R1 | MMC_CMD_AC;
+
+				mmc_claim_host(mq->card->host);
+				err = mmc_wait_for_cmd(mq->card->host, &cmd, 5);
+				mmc_release_host(mq->card->host);
+
+				if (err) {
+				printk(KERN_ERR "failed to get status(%d)!!\n"
+						, err);
+					msleep(5);
+					retries--;
+					continue;
+				}
+			} while (retries &&
+				(!(cmd.resp[0] & R1_READY_FOR_DATA) ||
+				(R1_CURRENT_STATE(cmd.resp[0]) == 7)));
+		}
 	}
 
 	if (mmc_bus_fails_resume(card->host)) {
@@ -686,7 +712,7 @@ static int mmc_blk_probe(struct mmc_card *card)
 	mmc_set_drvdata(card, md);
 	mmc_init_bus_resume_flags(card->host);
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
-	if (mmc_card_sd(card))
+	if (mmc_card_sd(card) || mmc_card_mmc(card))
 		mmc_set_bus_resume_policy(card->host, 1);
 #endif
 	add_disk(md->disk);

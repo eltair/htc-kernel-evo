@@ -609,6 +609,7 @@ static int dhd_set_pfn(dhd_pub_t *dhd, int enabled)
 	wl_pfn_t	pfn_element;
 	int i;
 	int config_network = 0;
+	int iov_len = 0;
 	/* Disable pfn */
 	bcm_mkiovar("pfn", (char *)&pfn_enabled, 4, iovbuf, sizeof(iovbuf));
 	dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
@@ -617,8 +618,9 @@ static int dhd_set_pfn(dhd_pub_t *dhd, int enabled)
 		return 0;
 
 	/* clear pfn */
-	bcm_mkiovar("pfnclear", NULL, 0, iovbuf, sizeof(iovbuf));
-	dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
+	iov_len = bcm_mkiovar("pfnclear", NULL, 0, iovbuf, sizeof(iovbuf));
+	if (iov_len)
+		dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, iov_len);
 
 	/* set pfn parameters */
 	pfn_param.version = htod32(PFN_VERSION);
@@ -854,6 +856,9 @@ int dhd_set_pktfilter(int add, int id, int offset, char *mask, char *pattern)
 	return 0;
 }
 
+#define WLC_HT_WEP_RESTRICT		0x01 	/* restrict HT with TKIP */
+#define WLC_HT_TKIP_RESTRICT	0x02 	/* restrict HT with WEP */
+
 int
 dhd_preinit_ioctls(dhd_pub_t *dhd)
 {
@@ -893,6 +898,7 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	uint filter_mode = 1;
 	wl_keep_alive_pkt_t keep_alive_pkt;
 	wl_keep_alive_pkt_t *keep_alive_pktp;
+	int ht_wsec_restrict = WLC_HT_TKIP_RESTRICT | WLC_HT_WEP_RESTRICT;
 	pdhd = dhd;
 
 
@@ -1113,6 +1119,10 @@ dhd_preinit_ioctls(dhd_pub_t *dhd)
 	memcpy((char*)keep_alive_pktp, &keep_alive_pkt, WL_KEEP_ALIVE_FIXED_LEN);
 
 	dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, buf, buf_len);
+
+	/* set HT restrict */
+	bcm_mkiovar("ht_wsec_restrict", (char *)&ht_wsec_restrict, 4, iovbuf, sizeof(iovbuf));
+	dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 
 	dhd_os_proto_unblock(dhd);
 	return 0;

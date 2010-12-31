@@ -39,11 +39,9 @@
 #endif
 #ifdef CONFIG_BATTERY_DS2784
 #include <linux/ds2784_battery.h>
-#elif CONFIG_BATTERY_DS2746
+#elif defined(CONFIG_BATTERY_DS2746)
 #include <linux/ds2746_battery.h>
 #endif
-
-#include <linux/smb329.h>
 
 static struct wake_lock vbus_wake_lock;
 
@@ -611,9 +609,13 @@ static void usb_status_notifier_func(int online)
 		blocking_notifier_call_chain(&cable_status_notifier_list,
 			htc_batt_info.rep.charging_source, NULL);
 
-	power_supply_changed(&htc_power_supplies[CHARGER_AC]);
-	power_supply_changed(&htc_power_supplies[CHARGER_USB]);
-	power_supply_changed(&htc_power_supplies[CHARGER_BATTERY]);
+	if (htc_battery_initial) {
+		power_supply_changed(&htc_power_supplies[CHARGER_AC]);
+		power_supply_changed(&htc_power_supplies[CHARGER_USB]);
+		power_supply_changed(&htc_power_supplies[CHARGER_BATTERY]);
+	} else {
+		pr_err("\n\n ### htc_battery_code is not inited yet! ###\n\n");
+	}
 	update_wake_lock(htc_batt_info.rep.charging_source);
 #else
 	mutex_lock(&htc_batt_info.lock);
@@ -1070,9 +1072,8 @@ static struct device_attribute htc_battery_attrs[] = {
 #ifdef CONFIG_HTC_BATTCHG_SMEM
 	__ATTR(smem_raw, S_IRUGO, htc_battery_show_smem, NULL),
 	__ATTR(smem_text, S_IRUGO, htc_battery_show_smem, NULL),
-#else
-	__ATTR(batt_attr_text, S_IRUGO, htc_battery_show_batt_attr, NULL),
 #endif
+	__ATTR(batt_attr_text, S_IRUGO, htc_battery_show_batt_attr, NULL),
 };
 
 enum {
@@ -1194,7 +1195,6 @@ static ssize_t htc_battery_set_full_level(struct device *dev,
 {
 	int rc = 0;
 	unsigned long percent = 100;
-	unsigned long param = 0;
 
 	percent = simple_strtoul(buf, NULL, 10);
 
@@ -1214,9 +1214,8 @@ static ssize_t htc_battery_set_full_level(struct device *dev,
 	mutex_lock(&htc_batt_info.lock);
 	htc_full_level_flag = 1;
 	htc_batt_info.rep.full_level = percent;
-	param = percent;
 	blocking_notifier_call_chain(&cable_status_notifier_list,
-		0xff, (void *) &param);
+		0xff, (void *) &htc_batt_info.rep.full_level);
 	mutex_unlock(&htc_batt_info.lock);
 			}
 	rc = 0;
@@ -1288,7 +1287,7 @@ static int update_batt_info(void)
 			ret = -1;
 		}
 		break;
-#elif CONFIG_BATTERY_DS2746
+#elif defined(CONFIG_BATTERY_DS2746)
 	case GUAGE_DS2746:
 		if (ds2746_get_battery_info(&htc_batt_info.rep)) {
 			BATT_ERR("%s: ds2746 read failed!!!", __func__);
@@ -1582,7 +1581,7 @@ static int htc_battery_probe(struct platform_device *pdev)
 #ifdef CONFIG_BATTERY_DS2784
 	if (pdata->guage_driver == GUAGE_DS2784)
 		ds2784_register_notifier(&ds2784_notifier);
-#elif CONFIG_BATTERY_DS2746
+#elif defined(CONFIG_BATTERY_DS2746)
 	if (pdata->guage_driver == GUAGE_DS2746)
 		ds2746_register_notifier(&ds2784_notifier);
 #endif

@@ -2696,7 +2696,7 @@ static int ov8810_vreg_enable(struct platform_device *pdev)
 	return rc;
 }
 
-
+#if 0
 static int ov8810_vreg_disable(struct platform_device *pdev)
 {
 	struct msm_camera_sensor_info *sdata = pdev->dev.platform_data;
@@ -2709,7 +2709,7 @@ static int ov8810_vreg_disable(struct platform_device *pdev)
 	rc = sdata->camera_power_off();
 	return rc;
 }
-
+#endif
 
 static int __ov8810_probe(struct platform_device *pdev)
 {

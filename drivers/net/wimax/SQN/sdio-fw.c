@@ -478,19 +478,19 @@ static int sqn_handle_mac_addr_tag(struct sdio_func *func, u8 *data, u32 length)
 		sqn_pr_dbg("single mac address\n");
 		/* we have only one mac addr */
 		get_mac_addr_from_str(data, length, priv->mac_addr);
-				
+
 		// Andrew 0720
 		// ++(priv->mac_addr[ETH_ALEN - 1])
-        // real MAC: 38:E6:D8:86:00:00 
+		// real MAC: 38:E6:D8:86:00:00 
 		// hboot will store: 38:E6:D8:85:FF:FF (minus 1)
 		// sdio need to recovery it by plusing 1: 38:E6:D8:86:00:00 (plus 1)
-	
+
 		if ((++(priv->mac_addr[ETH_ALEN - 1])) == 0x00)
-           if ((++(priv->mac_addr[ETH_ALEN - 2])) == 0x00)
-			   if ((++(priv->mac_addr[ETH_ALEN - 3])) == 0x00)
-                  if ((++(priv->mac_addr[ETH_ALEN - 4])) == 0x00) 
-					  if ((++(priv->mac_addr[ETH_ALEN - 5])) == 0x00) 
-						  ++(priv->mac_addr[ETH_ALEN - 6]);
+			if ((++(priv->mac_addr[ETH_ALEN - 2])) == 0x00)
+				if ((++(priv->mac_addr[ETH_ALEN - 3])) == 0x00)
+					if ((++(priv->mac_addr[ETH_ALEN - 4])) == 0x00)
+						if ((++(priv->mac_addr[ETH_ALEN - 5])) == 0x00)
+							++(priv->mac_addr[ETH_ALEN - 6]);
 
 	}
 	else if (2 * MAC_ADDR_STRING_LEN + 1 == length) { /* we have two macs */

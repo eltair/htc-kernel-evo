@@ -29,11 +29,19 @@
 
 #include <linux/usb/android_composite.h>
 
+#if defined(CONFIG_QCT_LTE)
+#include "diag_hdlc.h"
+char *buf_copy;
+char *buf_hdlc;
+#endif
+
 #define NO_HDLC 1
 #define ROUTE_TO_USERSPACE 1
 
+struct device diag_device;
+
 #if 1
-#define TRACE(tag,data,len,decode) do {} while(0)
+#define TRACE(tag, data, len, decode) do {} while (0)
 #else
 static void TRACE(const char *tag, const void *_data, int len, int decode)
 {
@@ -80,8 +88,7 @@ static void TRACE(const char *tag, const void *_data, int len, int decode)
 #define TX_REQ_NUM 4
 #define RX_REQ_NUM 4
 
-struct diag_context
-{
+struct diag_context {
 	struct usb_function function;
 	struct usb_composite_dev *cdev;
 	struct usb_ep *out;
@@ -117,6 +124,7 @@ struct diag_context
 	unsigned hdlc_count;
 	unsigned hdlc_escape;
 
+	struct platform_device *pdev;
 	u64 tx_count; /* to smd */
 	u64 rx_count; /* from smd */
 
@@ -217,6 +225,7 @@ static inline struct diag_context *func_to_dev(struct usb_function *f)
 	return container_of(f, struct diag_context, function);
 }
 
+static int msm_diag_probe(struct platform_device *pdev);
 static void smd_try_to_send(struct diag_context *ctxt);
 static void smd_diag_notify(void *priv, unsigned event);
 
@@ -450,6 +459,7 @@ static ssize_t diag_write(struct file *fp, const char __user *buf,
 	struct usb_request *req = 0;
 	int ret = 0;
 
+
 	ret = wait_event_interruptible(ctxt->write_wq,
 		((req = req_get(ctxt, &ctxt->tx_req_idle)) || !ctxt->online));
 
@@ -470,10 +480,45 @@ static ssize_t diag_write(struct file *fp, const char __user *buf,
 		count = TX_REQ_BUF_SZ;
 
 	if (req) {
+#if !defined(CONFIG_QCT_LTE)
 		if (copy_from_user(req->buf, buf, count)) {
 			ret = -EFAULT;
 			goto end;
 		}
+#else
+	struct diag_send_desc_type send = { NULL, NULL, DIAG_STATE_START, 0 };
+	struct diag_hdlc_dest_type enc = { NULL, NULL, 0 };
+	int payload_size;
+  /* need encode raw data for QCRIL log */
+	if (!buf_copy) {
+		buf_copy = kmalloc(RX_REQ_BUF_SZ, GFP_KERNEL);
+		if (buf_copy) {
+			ret = -ENOMEM;
+			goto end;
+		}
+	}
+	if (!buf_hdlc) {
+		buf_hdlc = kmalloc(RX_REQ_BUF_SZ, GFP_KERNEL);
+		if (!buf_hdlc) {
+			ret = -ENOMEM;
+			goto end;
+		}
+	}
+	payload_size = count - 4;
+	if (copy_from_user(buf_copy, buf + 4, payload_size)) {
+		ret = -EFAULT;
+		goto end;
+	}
+	send.state = DIAG_STATE_START;
+	send.pkt = buf_copy;
+	send.last = (void *)(buf_copy + payload_size - 1);
+	send.terminate = 1;
+	enc.dest = buf_hdlc;
+	enc.dest_last = (void *)(buf_hdlc + 2*payload_size + 3);
+	diag_hdlc_encode(&send, &enc);
+	count = (uint32_t) enc.dest - (uint32_t) buf_hdlc;
+	memcpy(req->buf, buf_hdlc, count);
+#endif
 
 		req->length = count;
 		ret = usb_ep_queue(ctxt->in, req, GFP_ATOMIC);
@@ -501,11 +546,13 @@ static int diag_open(struct inode *ip, struct file *fp)
 	int rc = 0;
 
 	mutex_lock(&ctxt->user_lock);
+#if !defined(CONFIG_QCT_LTE)
 	if (ctxt->opened) {
 		pr_err("%s: already opened\n", __func__);
 		rc = -EBUSY;
 		goto done;
 	}
+#endif
 	ctxt->user_read_len = 0;
 	ctxt->user_readp = 0;
 	if (!ctxt->user_read_buf) {
@@ -649,6 +696,7 @@ static ssize_t diag2arm9_write(struct file *fp, const char __user *buf,
 			break;
 		}
 		smd_write(ctxt->ch, ctxt->toARM9_buf, writed);
+		ctxt->tx_count += writed;
 		buf += writed;
 		count -= writed;
 	}
@@ -754,7 +802,7 @@ static void diag_process_hdlc(struct diag_context *ctxt, void *_data, unsigned l
 
 	while (len-- > 0) {
 		unsigned char x = *data++;
-		if (x == 0x7E) { 
+		if (x == 0x7E) {
 			if (count > 2) {
 				/* we're just ignoring the crc here */
 				TRACE("PC>", hdlc, count - 2, 0);
@@ -830,12 +878,13 @@ static void diag_out_complete(struct usb_ep *ept, struct usb_request *req)
 
 #if NO_HDLC
 		TRACE("PC>", req->buf, req->actual, 0);
-		if (ctxt->ch)
+		if (ctxt->ch) {
 			smd_write(ctxt->ch, req->buf, req->actual);
+			ctxt->tx_count += req->actual;
+		}
 #else
 		diag_process_hdlc(ctxt, req->buf, req->actual);
 #endif
-		ctxt->tx_count += req->actual;
 	}
 
 	req_put(ctxt, &ctxt->rx_req_idle, req);
@@ -885,6 +934,7 @@ again:
 				return;
 			}
 			smd_read(ctxt->ch, req->buf, r);
+			ctxt->rx_count += r;
 			req->actual = r;
 			req_put(ctxt, &ctxt->rx_arm9_done, req);
 			wake_up(&ctxt->read_arm9_wq);
@@ -904,7 +954,7 @@ again:
 			ctxt->rx_count += r;
 
 			if (!ctxt->online) {
-//				printk("$$$ discard %d\n", r);
+				/* printk("$$$ discard %d\n", r);*/
 				req_put(ctxt, &ctxt->tx_req_idle, req);
 				goto again;
 			}
@@ -1022,6 +1072,19 @@ rx_fail:
 	return -ENOMEM;
 }
 
+static void diag_dev_release(struct device *dev) {}
+
+static ssize_t show_diag_xfer_count(struct device *dev, struct device_attribute *attr,
+		char *buf)
+{
+	struct diag_context *ctxt = &_context;
+
+	return  sprintf(buf, "tx_count: %llu, rx_count: %llu\n",
+		ctxt->tx_count, ctxt->rx_count);
+}
+
+static DEVICE_ATTR(diag_xfer_count, 0444, show_diag_xfer_count, NULL);
+
 static int
 diag_function_bind(struct usb_configuration *c, struct usb_function *f)
 {
@@ -1057,6 +1120,19 @@ diag_function_bind(struct usb_configuration *c, struct usb_function *f)
 #endif
 	misc_register(&diag2arm9_device);
 
+	diag_device.release = diag_dev_release;
+	diag_device.parent = &ctxt->pdev->dev;
+	dev_set_name(&diag_device, "interface");
+	if (device_register(&diag_device) != 0) {
+		printk(KERN_ERR "diag failed to register device\n");
+		return 0;
+	}
+	if (device_create_file(&diag_device, &dev_attr_diag_xfer_count) != 0) {
+		printk(KERN_ERR "diag device_create_file failed");
+		device_unregister(&diag_device);
+		return 0;
+	}
+	ctxt->tx_count = ctxt->rx_count = 0;
 	return 0;
 }
 
@@ -1131,7 +1207,6 @@ static void diag_function_disable(struct usb_function *f)
 	usb_ep_disable(ctxt->in);
 	usb_ep_disable(ctxt->out);
 }
-
 #if defined(CONFIG_MSM_N_WAY_SMD)
 static void diag_qdsp_send(struct diag_context *ctxt)
 {
@@ -1178,16 +1253,6 @@ static void diag_qdsp_notify(void *priv, unsigned event)
 	diag_qdsp_send(ctxt);
 }
 
-static int msm_diag_probe(struct platform_device *pdev)
-{
-	struct diag_context *ctxt = &_context;
-	printk(KERN_INFO "diag:msm_diag_probe(), pdev->id=0x%x\n", pdev->id);
-
-	if (pdev->id == 1)
-		smd_open("DSP_DIAG", &ctxt->chqdsp, ctxt, diag_qdsp_notify);
-	return 0;
-}
-
 static struct platform_driver msm_smd_qdsp_ch1_driver = {
 	.probe = msm_diag_probe,
 	.driver = {
@@ -1196,6 +1261,19 @@ static struct platform_driver msm_smd_qdsp_ch1_driver = {
 	},
 };
 #endif
+
+static int msm_diag_probe(struct platform_device *pdev)
+{
+	struct diag_context *ctxt = &_context;
+	ctxt->pdev = pdev;
+	printk(KERN_INFO "diag:msm_diag_probe(), pdev->id=0x%x\n", pdev->id);
+
+#if defined(CONFIG_MSM_N_WAY_SMD)
+	if (pdev->id == 1)
+		smd_open("DSP_DIAG", &ctxt->chqdsp, ctxt, diag_qdsp_notify);
+#endif
+	return 0;
+}
 
 static int diag_set_enabled(const char *val, struct kernel_param *kp)
 {
@@ -1247,7 +1325,12 @@ int diag_bind_config(struct usb_configuration *c)
 	ctxt->function.set_alt = diag_function_set_alt;
 	ctxt->function.disable = diag_function_disable;
 
+/* Workaround: enable diag first */
+#ifdef CONFIG_MACH_MECHA
+	ctxt->function.hidden = 0;
+#else
 	ctxt->function.hidden = !_context.function_enable;
+#endif
 	if (!ctxt->function.hidden)
 		smd_diag_enable("diag_bind_config", 1);
 
@@ -1259,9 +1342,26 @@ static struct android_usb_function diag_function = {
 	.bind_config = diag_bind_config,
 };
 
+static struct platform_driver msm_smd_ch1_driver = {
+	.probe = msm_diag_probe,
+	.driver = {
+		.name = "SMD_DIAG",
+		.owner = THIS_MODULE,
+	},
+};
+static void diag_plat_release(struct device *dev) {}
+
+static struct platform_device diag_plat_device = {
+	.name		= "SMD_DIAG",
+	.id		= -1,
+	.dev		= {
+		.release	= diag_plat_release,
+	},
+};
 static int __init init(void)
 {
 	struct diag_context *ctxt = &_context;
+	int r;
 
 	printk(KERN_INFO "diag init\n");
 	spin_lock_init(&ctxt->req_lock);
@@ -1282,10 +1382,23 @@ static int __init init(void)
 	mutex_init(&ctxt->smd_lock);
 	ctxt->is2ARM11 = 0;
 
+	r = platform_driver_register(&msm_smd_ch1_driver);
+	if (r < 0) {
+		printk(KERN_ERR "%s: Register device fail\n", __func__);
+		return r;
+	}
 #if defined(CONFIG_MSM_N_WAY_SMD)
 	INIT_LIST_HEAD(&ctxt->tx_qdsp_idle);
 	platform_driver_register(&msm_smd_qdsp_ch1_driver);
 #endif
+	r = platform_device_register(&diag_plat_device);
+	if (r < 0) {
+		printk(KERN_ERR "%s: Register device fail\n", __func__);
+#if defined(CONFIG_MSM_N_WAY_SMD)
+		platform_driver_unregister(&msm_smd_qdsp_ch1_driver);
+#endif
+		return r;
+	}
 	ctxt->init_done = 1;
 
 	android_register_function(&diag_function);

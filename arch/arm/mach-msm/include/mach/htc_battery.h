@@ -22,7 +22,8 @@
 #define SET_ICL500		0X65
 #define SET_ICL100		0X66
 #define CHECK_INT2		0X67
-
+#define OVERTEMP_VREG_4060	0XC8
+#define NORMALTEMP_VREG_4200	0XC9
 /* information about the system we're running on */
 extern unsigned int system_rev;
 

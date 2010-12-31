@@ -342,6 +342,7 @@ static int axi_freq_notifier_handler(struct notifier_block *block,
 	 * and AXI rates. */
 	if (cpu_is_msm7x30() || cpu_is_msm8x55())
 		return clk_set_rate(pbus_clk, min_freq/2);
+	return 0;
 }
 #endif
 
@@ -595,6 +596,31 @@ static void __init clock_debug_init(void)
 static inline void __init clock_debug_init(void) {}
 #endif
 
+static struct clk *axi_clk_userspace;
+static int min_axi_khz;
+static int param_set_min_axi(const char *val, struct kernel_param *kp)
+{
+	int ret;
+	ret = param_set_int(val, kp);
+	if (min_axi_khz >= 0) {
+		ret = clk_set_rate_locked(axi_clk_userspace,
+			min_axi_khz * 1000);
+	}
+	return ret;
+}
+
+static int param_get_min_axi(char *buffer, struct kernel_param *kp)
+{
+	unsigned long rate;
+	int len;
+	rate = clk_get_rate(axi_clk_userspace);
+	len = sprintf(buffer, "%d %ld", min_axi_khz, rate);
+	return len;
+}
+
+module_param_call(min_axi_khz, param_set_min_axi,
+	param_get_min_axi, &min_axi_khz, S_IWUSR | S_IRUGO);
+
 
 /* The bootloader and/or AMSS may have left various clocks enabled.
  * Disable any clocks that belong to us (CLKFLAG_AUTO_OFF) but have
@@ -624,6 +650,7 @@ static int __init clock_late_init(void)
 	clock_debug_init();
 
 	axi_clk = clk_get(NULL, "ebi1_clk");
+	axi_clk_userspace = clk_get(NULL, "ebi1_clk");
 
 	return 0;
 }
