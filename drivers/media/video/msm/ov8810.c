@@ -1966,6 +1966,7 @@ static int ov8810_probe_read_id(const struct msm_camera_sensor_info *data)
 	if (ov8810_i2c_read(OV8810_PIDH_REG, &chipidh, 2) < 0) {
 		rc = -1;
 		pr_err("read sensor id fail\n");
+		return rc;
 	}
 
 	pr_info("ov8810 model_id + ver = 0x%x\n", chipidh);
@@ -1984,6 +1985,7 @@ static int ov8810_probe_read_id(const struct msm_camera_sensor_info *data)
 	if (IS_ERR(vreg_af_actuator))
 		return PTR_ERR(vreg_af_actuator);
 
+	data->camera_set_source(MAIN_SOURCE);
 	pr_info(" ov8810_probe_init_sensor finishes\n");
 	return rc;
 }
@@ -2658,6 +2660,8 @@ static int ov8810_sensor_probe(struct msm_camera_sensor_info *info,
 	if (rc < 0)
 		return rc;
 
+	if (info->camera_main_set_probe != NULL)
+		info->camera_main_set_probe(true);
 	init_suspend();
 	s->s_init = ov8810_sensor_open_init;
 	s->s_release = ov8810_sensor_release;
@@ -2682,44 +2686,17 @@ probe_done:
 
 }
 
-static int ov8810_vreg_enable(struct platform_device *pdev)
-{
-	struct msm_camera_sensor_info *sdata = pdev->dev.platform_data;
-	int rc;
-	pr_info("%s camera vreg on\n", __func__);
-
-	if (sdata->camera_power_on == NULL) {
-		pr_err("sensor platform_data didnt register\n");
-		return -EIO;
-	}
-	rc = sdata->camera_power_on();
-	return rc;
-}
-
-#if 0
-static int ov8810_vreg_disable(struct platform_device *pdev)
-{
-	struct msm_camera_sensor_info *sdata = pdev->dev.platform_data;
-	int rc;
-	printk(KERN_INFO "%s camera vreg off\n", __func__);
-	if (sdata->camera_power_off == NULL) {
-		pr_err("sensor platform_data didnt register\n");
-		return -EIO;
-	}
-	rc = sdata->camera_power_off();
-	return rc;
-}
-#endif
-
 static int __ov8810_probe(struct platform_device *pdev)
 {
-	int rc;
+	struct msm_camera_sensor_info *sdata = pdev->dev.platform_data;
 	printk("__ov8810_probe\n");
 	ov8810_pdev = pdev;
-	rc = ov8810_vreg_enable(pdev);
-	if (rc < 0)
-		pr_err("__ov8810_probe fail sensor power on error\n");
-
+	if (sdata->camera_main_get_probe != NULL) {
+		if (sdata->camera_main_get_probe()) {
+			pr_info("__ov8810_probe camera main get probed already.\n");
+			return 0;
+		}
+	}
 	return msm_camera_drv_start(pdev, ov8810_sensor_probe);
 }
 

@@ -183,8 +183,6 @@ int tps_set_charger_ctrl(u32 ctl)
 		pr_info("Switch charger OFF\n");
 		tps65200_i2c_write_byte(0x29, 0x01);
 		tps65200_i2c_write_byte(0x28, 0x00);
-		tps65200_i2c_read_byte(&status, 0x09);
-		pr_info("TPS65200 INT2 %x\n", status);
 		break;
 	case ENABLE_SLOW_CHG:
 		pr_info("Switch charger ON (SLOW)\n");
@@ -211,7 +209,8 @@ int tps_set_charger_ctrl(u32 ctl)
 	case CHECK_CHG:
 		pr_info("Switch charger CHECK \n");
 		tps65200_i2c_read_byte(&status, 0x06);
-		pr_info("TPS65200 STATUS_A%x\n", status);
+		tps65200_i2c_read_byte(&regh, 0x09);
+		pr_info("TPS65200 STATUS_A%x, INT2:%x\n", status, regh);
 		break;
 	case SET_ICL500:
 		pr_info("Switch charger SET_ICL500 \n");
@@ -221,10 +220,22 @@ int tps_set_charger_ctrl(u32 ctl)
 		pr_info("Switch charger SET_ICL100 \n");
 		tps65200_i2c_write_byte(0x23, 0x02);
 		break;
+	case CHECK_INT1:
+		pr_info("Switch charger CHECK_INT1 \n");
+		tps65200_i2c_read_byte(&status, 0x08);
+		pr_info("Switch charger CHECK_INT1: regh 0x08h=%x\n", status);
+		result = (int)status;
+		break;
 	case CHECK_INT2:
 		pr_info("Switch charger CHECK_INT2 \n");
 		tps65200_i2c_read_byte(&status, 0x09);
 		pr_info("TPS65200 INT2 %x\n", status);
+		result = (int)status;
+		break;
+	case CHECK_CONTROL:
+		pr_info("Switch charger CHECK_CONTROL \n");
+		tps65200_i2c_read_byte(&status, 0x00);
+		pr_info("TPS65200 regh 0x00=%x\n", regh);
 		break;
 	case OVERTEMP_VREG_4060:
 		pr_info("Switch charger OVERTEMP_VREG_4060 \n");

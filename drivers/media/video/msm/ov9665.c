@@ -790,6 +790,15 @@ int ov9665_sensor_open_init(struct msm_camera_sensor_info *data)
 	gpio_free(data->sensor_pwd);
 	mdelay(3);
 
+	if (data->camera_get_source() == SECOND_SOURCE) {
+		/* Config reset */
+		rc = gpio_request(data->sensor_reset, "ov9665");
+		if (!rc)
+			gpio_direction_output(data->sensor_reset, 1);
+		else
+			pr_info("GPIO(%d) request faile", data->sensor_reset);
+		gpio_free(data->sensor_reset);
+	}
 	/* Input MCLK = 24MHz */
 	msm_camio_clk_rate_set(24000000);
 	mdelay(5);
@@ -893,6 +902,19 @@ int ov9665_sensor_release(void)
 		pr_info("GPIO(%d) request faile",
 			ov9665_ctrl->sensordata->sensor_pwd);
 	gpio_free(ov9665_ctrl->sensordata->sensor_pwd);
+
+	if (ov9665_ctrl->sensordata->camera_get_source() == SECOND_SOURCE) {
+		rc = gpio_request(
+			ov9665_ctrl->sensordata->sensor_reset, "ov9665");
+		if (!rc)
+			gpio_direction_output(
+			ov9665_ctrl->sensordata->sensor_reset, 0);
+		else
+			pr_info("GPIO(%d) request faile",
+				ov9665_ctrl->sensordata->sensor_reset);
+		gpio_free(ov9665_ctrl->sensordata->sensor_reset);
+	}
+
 
 	if (ov9665_ctrl) {
 		kfree(ov9665_ctrl);
