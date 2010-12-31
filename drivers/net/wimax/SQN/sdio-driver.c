@@ -49,6 +49,8 @@ bool drop_packet = false;
 module_param(firmware_name, charp, S_IRUGO);
 module_param(load_firmware, bool, S_IRUGO);
 
+struct sqn_private *g_priv = 0;
+
 //reference sdio-driver.c
 extern const uint8_t  ss_macaddr[ETH_ALEN];
 
@@ -356,6 +358,7 @@ struct sqn_private *sqn_add_card(void *card, struct device *realdev)
 	}
 
 	priv = netdev_priv(dev);
+	g_priv = priv;
 	memset(priv, 0, sizeof(struct sqn_private));
 
 	/*

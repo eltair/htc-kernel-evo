@@ -94,8 +94,7 @@ void switch_set_state(struct switch_dev *sdev, int state)
 			printk(KERN_ERR "out of memory in switch_set_state\n");
 			kobject_uevent(&sdev->dev->kobj, KOBJ_CHANGE);
 		}
-	} else
-		printk(KERN_INFO "%s:sdev->state == state\n", __func__);
+	}
 }
 EXPORT_SYMBOL_GPL(switch_set_state);
 

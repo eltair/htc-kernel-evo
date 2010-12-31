@@ -41,7 +41,6 @@
 #include <dhd_bus.h>
 #include <dhd_dbg.h>
 #include <asm/mach-types.h>
-#include <mach/msm_hsusb.h>
 
 /* Packet alignment for most efficient SDIO (can change based on platform) */
 #ifndef DHD_SDALIGN
@@ -60,6 +59,7 @@
 				 * round off at the end of buffer
 				 */
 extern int wifi_get_dot11n_enable(void);
+extern int usb_get_connect_type(void); // msm72k_udc.c
 
 typedef struct dhd_prot {
 	uint16 reqid;
@@ -672,30 +672,25 @@ static dhd_pub_t *pdhd = NULL;
 
 int dhd_set_suspend(int value, dhd_pub_t *dhd)
 {
-	int power_mode = PM_MAX;
+	/* int power_mode = PM_MAX; */
 #if 0
 	wl_pkt_filter_enable_t	enable_parm;
-#endif
 	char iovbuf[32];
 	int bcn_li_dtim = 3;
-
+#endif
 
 	if (dhd && dhd->up) {
 		dhd_os_proto_block(dhd);
 		if (value) {
+#if 0
 			if (usb_get_connect_type() == 0) {
 				dhdcdc_set_ioctl(dhd, 0, WLC_SET_PM,
 					(char *)&power_mode,
 					sizeof(power_mode));
 			}
-#if 0
-			/* Enable packet filter, only allow unicast packet to send up */
-			enable_parm.id = htod32(100);
-			enable_parm.enable = htod32(1);
-			bcm_mkiovar("pkt_filter_enable", (char *)&enable_parm,
-				sizeof(wl_pkt_filter_enable_t), iovbuf, sizeof(iovbuf));
-			dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 #endif
+
+#if 0
 			/* set bcn_li_dtim */
 			if (usb_get_connect_type() == 0) {
 				bcm_mkiovar("bcn_li_dtim", (char *)&bcn_li_dtim,
@@ -703,31 +698,38 @@ int dhd_set_suspend(int value, dhd_pub_t *dhd)
 				dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf,
 						sizeof(iovbuf));
 			}
+#endif
+
 #ifdef WLAN_PFN
 			/* set pfn */
 			dhd_set_pfn(dhd, 1);
 #endif
 			/* indicate wl_iw screen off */
 			wl_iw_set_screen_off(1);
+
+			/* browser no need active mode in screen off */
+			dhdhtc_set_power_control(0, DHDHTC_POWER_CTRL_BROWSER_LOAD_PAGE);
+			dhdhtc_update_wifi_power_mode(1);
+			dhdhtc_update_dtim_listen_interval(1);
 		} else {
+#if 0
 			power_mode = PM_FAST;
 			dhdcdc_set_ioctl(dhd, 0, WLC_SET_PM, (char *)&power_mode,
 				sizeof(power_mode));
-#if 0
-			/* disable pkt filter */
-			enable_parm.id = htod32(100);
-			enable_parm.enable = htod32(0);
-			bcm_mkiovar("pkt_filter_enable", (char *)&enable_parm,
-				sizeof(wl_pkt_filter_enable_t), iovbuf, sizeof(iovbuf));
-			dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
 #endif
+			dhdhtc_update_wifi_power_mode(0);
+			dhdhtc_update_dtim_listen_interval(0);
+
+#if 0
 			/* set bcn_li_dtim */
 			bcn_li_dtim = 0;
 			bcm_mkiovar("bcn_li_dtim", (char *)&bcn_li_dtim,
 				4, iovbuf, sizeof(iovbuf));
 			dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
+#endif
+
 #ifdef WLAN_PFN
-				dhd_set_pfn(dhd, 0);
+			dhd_set_pfn(dhd, 0);
 #endif
 			/* indicate wl_iw screen on */
 			wl_iw_set_screen_off(0);
@@ -1136,3 +1138,96 @@ dhd_prot_stop(dhd_pub_t *dhd)
 {
 	/* Nothing to do for CDC */
 }
+
+/* ========================================================== */
+
+
+/* bitmask, bit value: 1 - enable, 0 - disable
+ */
+static unsigned int dhdhtc_power_ctrl_mask = 0;
+int dhdcdc_power_active_while_plugin = 1;
+
+int dhdhtc_update_wifi_power_mode(int is_screen_off)
+{
+	int pm_type;
+	dhd_pub_t *dhd = pdhd;
+
+	if (!dhd) {
+		myprintf("dhd is not attached\n");
+		return -1;
+	}
+
+	if (dhdhtc_power_ctrl_mask) {
+		myprintf("power active. ctrl_mask: 0x%x\n", dhdhtc_power_ctrl_mask);
+		pm_type = PM_OFF;
+		dhdcdc_set_ioctl(dhd, 0, WLC_SET_PM, &pm_type, sizeof(pm_type));
+	}  else if  (dhdcdc_power_active_while_plugin && usb_get_connect_type()) {
+		myprintf("power active. usb_type:%d\n", usb_get_connect_type());
+		pm_type = PM_OFF;
+		dhdcdc_set_ioctl(dhd, 0, WLC_SET_PM, &pm_type, sizeof(pm_type));
+	} else {
+		if (is_screen_off)
+			pm_type = PM_MAX;
+		else
+			pm_type = PM_FAST;
+		myprintf("update pm: %s\n", pm_type==1?"PM_MAX":"PM_FAST");
+		dhdcdc_set_ioctl(dhd, 0, WLC_SET_PM, &pm_type, sizeof(pm_type));
+	}
+
+	return 0;
+}
+
+
+int dhdhtc_set_power_control(int power_mode, unsigned int reason)
+{
+
+	if (reason < DHDHTC_POWER_CTRL_MAX_NUM) {
+		if (power_mode) {
+			dhdhtc_power_ctrl_mask |= 0x1<<reason;
+		} else {
+			dhdhtc_power_ctrl_mask &= ~(0x1<<reason);
+		}
+
+
+	} else {
+		myprintf("%s: Error reason: %u", __func__, reason);
+		return -1;
+	}
+
+	return 0;
+}
+
+unsigned int dhdhtc_get_cur_pwr_ctrl(void)
+{
+	return dhdhtc_power_ctrl_mask;
+}
+
+extern int wl_iw_is_during_wifi_call(void);
+int dhdhtc_update_dtim_listen_interval(int is_screen_off)
+{
+	char iovbuf[32];
+	int bcn_li_dtim;
+	int ret = 0;
+	dhd_pub_t *dhd = pdhd;
+
+	if (!dhd) {
+		myprintf("dhd is not attached\n");
+		return -1;
+	}
+
+	if (wl_iw_is_during_wifi_call() || !is_screen_off)
+		bcn_li_dtim = 0;
+	else
+		bcn_li_dtim = 3;
+
+	/* set bcn_li_dtim */
+	bcm_mkiovar("bcn_li_dtim", (char *)&bcn_li_dtim,
+		4, iovbuf, sizeof(iovbuf));
+	dhdcdc_set_ioctl(dhd, 0, WLC_SET_VAR, iovbuf, sizeof(iovbuf));
+
+	myprintf("update dtim listern interval: %d\n", bcn_li_dtim);
+
+	return ret;
+}
+
+

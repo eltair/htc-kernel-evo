@@ -8,8 +8,8 @@
 #include <linux/interrupt.h>
 
 // FIXME: remove this if unnecessary in the future
-#ifdef CONFIG_HTC_HEADSET
-#include <mach/htc_headset_common.h>
+#ifdef CONFIG_HTC_HEADSET_MGR
+#include <mach/htc_headset_mgr.h>
 #endif
 
 #if 1
@@ -237,7 +237,7 @@ static void OnDownstreamRxPoweredUp(struct hdmi_info *hdmi)
         HDMI_DBG("%s\n", __func__);
 	dsRxPoweredUp = true;
 	HotPlugService(hdmi);
-#ifdef CONFIG_HTC_HEADSET
+#ifdef CONFIG_HTC_HEADSET_MGR
 	/* send cable in event */
 	switch_send_event(BIT_HDMI_CABLE, 1);
 	HDMI_DBG("Cable inserted.\n");
@@ -575,7 +575,7 @@ void tpi_cable_conn(struct hdmi_info *hdmi)
 
 	hdmi->first = false;
 #if 0
-#ifdef CONFIG_HTC_HEADSET
+#ifdef CONFIG_HTC_HEADSET_MGR
 	/* send cable in event */
 	switch_send_event(BIT_HDMI_CABLE, 1);
 	HDMI_DBG("Cable inserted.\n");
@@ -612,7 +612,7 @@ void tpi_cable_disconn(struct hdmi_info *hdmi, bool into_d3)
 		memset(hdmi->edid_buf, 0, 512);
 		mutex_unlock(&hdmi->lock);
 	}
-#ifdef CONFIG_HTC_HEADSET
+#ifdef CONFIG_HTC_HEADSET_MGR
 	HDMI_DBG("Cable unplugged.\n");
 	switch_send_event(BIT_HDMI_CABLE, 0);
 #endif
@@ -705,12 +705,9 @@ static void tpi_poll(struct hdmi_info *hdmi)
 				mutex_unlock(&hdmi->polling_lock);
 				return;
 			}
-		} else if ( false == hdmi->cable_connected) {
+		} else if ( false == hdmi->cable_connected)
 			/* only occur while booting without cable attached. */
 			tpi_cable_disconn(hdmi, true);
-			mutex_unlock(&hdmi->polling_lock);
-			return;
-		}
 	}
 
 	// Check rx power

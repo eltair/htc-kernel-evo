@@ -20,59 +20,157 @@
 #include <linux/device.h>
 #include <linux/rfkill.h>
 #include <linux/delay.h>
-#include <asm/gpio.h>
+#include <linux/gpio.h>
 #include <asm/mach-types.h>
 
+#include "gpio_chip.h"
 #include "proc_comm.h"
 #include "board-supersonic.h"
 
+#define HTC_RFKILL_DBG
+
 static struct rfkill *bt_rfk;
 static const char bt_name[] = "bcm4329";
-
-static int supersonic_bt_status;
+static int pre_state;
 
 static uint32_t supersonic_bt_init_table[] = {
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RTS, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),	/* BT_RTS */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_CTS, 0, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),	/* BT_CTS */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RX, 0, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),	/* BT_RX */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_TX, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),	/* BT_TX */
+	/* BT_RTS */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RTS,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_8MA),
+	/* BT_CTS */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_CTS,
+				0,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_RX */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RX,
+				0,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_TX */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_TX,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_8MA),
 
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_RESET_N, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_RESET_N */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_SHUTDOWN_N, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_SHUTDOWN_N */
+	/* BT_SHUTDOWN_N */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_SHUTDOWN_N,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_4MA),
+	/* BT_RESET_N */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_RESET_N,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_4MA),
 
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_HOST_WAKE, 0, GPIO_INPUT, GPIO_PULL_UP, GPIO_4MA),	/* BT_HOST_WAKE */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_CHIP_WAKE, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_CHIP_WAKE */
+	/* BT_HOST_WAKE */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_HOST_WAKE,
+				0,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_4MA),
+	/* BT_CHIP_WAKE */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_CHIP_WAKE,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_4MA),
 };
 
 static uint32_t supersonic_bt_on_table[] = {
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RTS, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),	/* BT_RTS */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_CTS, 2, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),	/* BT_CTS */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RX, 2, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),	/* BT_RX */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_TX, 2, GPIO_OUTPUT, GPIO_PULL_UP, GPIO_8MA),	/* BT_TX */
+	/* BT_RTS */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RTS,
+				2,
+				GPIO_OUTPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_CTS */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_CTS,
+				2,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_RX */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RX,
+				2,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_TX */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_TX,
+				2,
+				GPIO_OUTPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
 
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_HOST_WAKE, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_HOST_WAKE */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_CHIP_WAKE, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_CHIP_WAKE */
-
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_RESET_N, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_RESET_N */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_SHUTDOWN_N, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_SHUTDOWN_N */
+	/* BT_HOST_WAKE */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_HOST_WAKE,
+				0,
+				GPIO_INPUT,
+				GPIO_NO_PULL,
+				GPIO_4MA),
+	/* BT_CHIP_WAKE */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_CHIP_WAKE,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_4MA),
 };
 
-/* BT off and system is sleep/suspend */
-static uint32_t supersonic_bt_disable_sleep_table[] = {
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RTS, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),	/* OLNP */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_CTS, 0, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),	/* OLNP */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RX, 0, GPIO_INPUT, GPIO_PULL_UP, GPIO_8MA),	/* OLNP */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_TX, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_8MA),	/* OLNP */
+static uint32_t supersonic_bt_off_table[] = {
+	/* BT_RTS */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RTS,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_8MA),
+	/* BT_CTS */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_CTS,
+				0,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_RX */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_RX,
+				0,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_8MA),
+	/* BT_TX */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_UART1_TX,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_8MA),
 
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_HOST_WAKE, 0, GPIO_INPUT, GPIO_PULL_UP, GPIO_4MA),	/* BT_HOST_W, OLNP */
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_CHIP_WAKE, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),	/* BT_CHIP_WAKE, OLNP */
+	/* BT_HOST_WAKE */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_HOST_WAKE,
+				0,
+				GPIO_INPUT,
+				GPIO_PULL_UP,
+				GPIO_4MA),
+	/* BT_CHIP_WAKE */
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_BT_CHIP_WAKE,
+				0,
+				GPIO_OUTPUT,
+				GPIO_NO_PULL,
+				GPIO_4MA),
 };
 
 static void config_bt_table(uint32_t *table, int len)
 {
 	int n;
 	unsigned id;
-	for(n = 0; n < len; n++) {
+	for (n = 0; n < len; n++) {
 		id = table[n];
 		msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &id, 0);
 	}
@@ -80,96 +178,135 @@ static void config_bt_table(uint32_t *table, int len)
 
 static void supersonic_config_bt_init(void)
 {
-	supersonic_bt_status = 0;
-	config_bt_table(supersonic_bt_init_table, ARRAY_SIZE(supersonic_bt_init_table));
+	/* set bt initial configuration*/
+	config_bt_table(supersonic_bt_init_table,
+				ARRAY_SIZE(supersonic_bt_init_table));
+	/* BT_RESET_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 	mdelay(5);
-	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
-	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 
-	gpio_configure(SUPERSONIC_GPIO_BT_UART1_RTS, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);	/* OLNP */
-	gpio_configure(SUPERSONIC_GPIO_BT_UART1_TX, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);	/* OLNP */
+	/* BT_SHUTDOWN_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
+	/* BT_RESET_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
+	mdelay(15);
 
-	gpio_configure(SUPERSONIC_GPIO_BT_CHIP_WAKE, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);	/* OLNP */
+	/* BT_RESET_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+	/* BT_SHUTDOWN_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+
+	/* BT_RTS */
+	gpio_configure(SUPERSONIC_GPIO_BT_UART1_RTS,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+	/* BT_TX */
+	gpio_configure(SUPERSONIC_GPIO_BT_UART1_TX,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+
+	/* BT_CHIP_WAKE */
+	gpio_configure(SUPERSONIC_GPIO_BT_CHIP_WAKE,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 }
 
 static void supersonic_config_bt_on(void)
 {
-	config_bt_table(supersonic_bt_on_table, ARRAY_SIZE(supersonic_bt_on_table));
+
+	#ifdef HTC_RFKILL_DBG
+	printk(KERN_INFO "-- RK ON --\n");
+	#endif
+
+	/* set bt on configuration*/
+	config_bt_table(supersonic_bt_on_table,
+				ARRAY_SIZE(supersonic_bt_on_table));
 	mdelay(5);
-	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
-	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
-
-	gpio_configure(SUPERSONIC_GPIO_BT_CHIP_WAKE, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
-	supersonic_bt_status = 1;
-}
-
-void supersonic_config_bt_disable_sleep(void)
-{
-	config_bt_table(supersonic_bt_disable_sleep_table, ARRAY_SIZE(supersonic_bt_disable_sleep_table));
+	/* BT_SHUTDOWN_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
+	/* BT_RESET_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
 	mdelay(5);
-	gpio_configure(SUPERSONIC_GPIO_BT_UART1_RTS, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);	/* OLNP */
-	gpio_configure(SUPERSONIC_GPIO_BT_UART1_TX, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);	/* OLNP */
 
-	gpio_configure(SUPERSONIC_GPIO_BT_CHIP_WAKE, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);	/* OLNP */
+	/* BT_CHIP_WAKE */
+	gpio_configure(SUPERSONIC_GPIO_BT_CHIP_WAKE,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_HIGH);
 }
 
 static void supersonic_config_bt_off(void)
 {
-	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
-	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N, GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
-	supersonic_config_bt_disable_sleep();
-	supersonic_bt_status = 0;
+	#ifdef HTC_RFKILL_DBG
+	printk(KERN_INFO "-- RK OFF --\n");
+	#endif
+
+	/* BT_RESET_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_RESET_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+	/* BT_SHUTDOWN_N */
+	gpio_configure(SUPERSONIC_GPIO_BT_SHUTDOWN_N,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+
+	config_bt_table(supersonic_bt_off_table,
+				ARRAY_SIZE(supersonic_bt_off_table));
+	mdelay(5);
+
+	/* BT_RTS */
+	gpio_configure(SUPERSONIC_GPIO_BT_UART1_RTS,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+	/* BT_TX */
+	gpio_configure(SUPERSONIC_GPIO_BT_UART1_TX,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
+
+	/* BT_CHIP_WAKE */
+	gpio_configure(SUPERSONIC_GPIO_BT_CHIP_WAKE,
+				GPIOF_DRIVE_OUTPUT | GPIOF_OUTPUT_LOW);
 }
 
-void supersonic_config_bt_disable_active(void)
+static int bluetooth_set_power(void *data, bool blocked)
 {
-	supersonic_config_bt_disable_sleep();
-}
+	if (pre_state == blocked) {
+		#ifdef HTC_RFKILL_DBG
+		printk(KERN_INFO "-- SAME ST --\n");
+		#endif
+		return 0;
+	} else
+		pre_state = blocked;
 
-int supersonic_is_bluetooth_off(void)
-{
-	return !supersonic_bt_status;	//ON:1, OFF:0
-}
-
-static int bluetooth_set_power(void *data, enum rfkill_state state)
-{
-	switch (state) {
-		case RFKILL_STATE_UNBLOCKED:
-			supersonic_config_bt_on();
-			break;
-		case RFKILL_STATE_SOFT_BLOCKED:
-			supersonic_config_bt_off();
-			break;
-		default:
-			pr_err("%s: bad rfkill state %d\n", __func__, state);
-	}
+	if (!blocked)
+		supersonic_config_bt_on();
+	else
+		supersonic_config_bt_off();
 
 	return 0;
 }
 
+static struct rfkill_ops supersonic_rfkill_ops = {
+	.set_block = bluetooth_set_power,
+};
+
 static int supersonic_rfkill_probe(struct platform_device *pdev)
 {
 	int rc = 0;
-	enum rfkill_state default_state = RFKILL_STATE_SOFT_BLOCKED;
+	bool default_state = true; /* off */
 
 	supersonic_config_bt_init();	/* bt gpio initial config */
 
-	rfkill_set_default(RFKILL_TYPE_BLUETOOTH, default_state);
 	bluetooth_set_power(NULL, default_state);
 
-	bt_rfk = rfkill_allocate(&pdev->dev, RFKILL_TYPE_BLUETOOTH);
-	if (!bt_rfk)
-		return -ENOMEM;
+	bt_rfk = rfkill_alloc(bt_name, &pdev->dev, RFKILL_TYPE_BLUETOOTH,
+						 &supersonic_rfkill_ops, NULL);
+	if (!bt_rfk) {
+		rc = -ENOMEM;
+		goto err_rfkill_reset;
+	}
 
-	bt_rfk->name = bt_name;
-	bt_rfk->state = default_state;
+	rfkill_set_states(bt_rfk, default_state, false);
 
 	/* userspace cannot take exclusive control */
-	bt_rfk->user_claim_unsupported = 1;
-	bt_rfk->user_claim = 0;
-	bt_rfk->data = NULL;
-	bt_rfk->toggle_radio = bluetooth_set_power;
-
 	rc = rfkill_register(bt_rfk);
 	if (rc)
 		goto err_rfkill_reg;
@@ -177,14 +314,15 @@ static int supersonic_rfkill_probe(struct platform_device *pdev)
 	return 0;
 
 err_rfkill_reg:
-	rfkill_free(bt_rfk);
+	rfkill_destroy(bt_rfk);
+err_rfkill_reset:
 	return rc;
 }
 
 static int supersonic_rfkill_remove(struct platform_device *dev)
 {
 	rfkill_unregister(bt_rfk);
-	rfkill_free(bt_rfk);
+	rfkill_destroy(bt_rfk);
 
 	return 0;
 }
@@ -200,6 +338,7 @@ static struct platform_driver supersonic_rfkill_driver = {
 
 static int __init supersonic_rfkill_init(void)
 {
+	pre_state = -1;
 	if (!machine_is_supersonic())
 		return 0;
 

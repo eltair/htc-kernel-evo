@@ -146,7 +146,7 @@ static int tps65200_i2c_write_byte(u8 value, u8 reg)
 	temp_buffer[1] = value;
 	result = tps65200_i2c_write(temp_buffer, reg, 1);
 	if (result != 0)
-		pr_info("TPS65200 I2C write fail = %d\n",result);
+		pr_info("TPS65200 I2C write fail = %d\n", result);
 
     return result;
 }
@@ -165,7 +165,7 @@ static int tps65200_i2c_read_byte(u8 *value, u8 reg)
 	int result = 0;
 	result = tps65200_i2c_read(value, reg, 1);
 	if (result != 0)
-		pr_info("TPS65200 I2C read fail = %d\n",result);
+		pr_info("TPS65200 I2C read fail = %d\n", result);
 
 	return result;
 }
@@ -173,7 +173,9 @@ static int tps65200_i2c_read_byte(u8 *value, u8 reg)
 int tps_set_charger_ctrl(u32 ctl)
 {
 	int result = 0;
-    u8 status;
+	u8 version;
+	u8 status;
+	u8 regh;
 
 	switch (ctl) {
 	case DISABLE:
@@ -187,14 +189,22 @@ int tps_set_charger_ctrl(u32 ctl)
 		pr_info("Switch charger ON (SLOW)\n");
 		tps65200_i2c_write_byte(0x29, 0x01);
 		tps65200_i2c_write_byte(0x2A, 0x00);
-		tps65200_i2c_write_byte(0x82, 0x03);
+		tps65200_i2c_write_byte(0x86, 0x03);
 		break;
 	case ENABLE_FAST_CHG:
 		pr_info("Switch charger ON (FAST)\n");
 		tps65200_i2c_write_byte(0x29, 0x01);
 		tps65200_i2c_write_byte(0x2A, 0x00);
-		tps65200_i2c_write_byte(0x82, 0x03);
+		tps65200_i2c_write_byte(0x86, 0x03);
 		tps65200_i2c_write_byte(0xA3, 0x02);
+		tps65200_i2c_read_byte(&regh, 0x01);
+		pr_info("1.batt: Switch charger ON (FAST): regh 0x01=%x\n", regh);
+		tps65200_i2c_read_byte(&regh, 0x00);
+		pr_info("2.batt: Switch charger ON (FAST): regh 0x00=%x\n", regh);
+		tps65200_i2c_read_byte(&regh, 0x03);
+		pr_info("2.batt: Switch charger ON (FAST): regh 0x03=%x\n", regh);
+		tps65200_i2c_read_byte(&regh, 0x02);
+		pr_info("2.batt: Switch charger ON (FAST): regh 0x02=%x\n", regh);
 		break;
 	case CHECK_CHG:
 		pr_info("Switch charger CHECK \n");
@@ -255,12 +265,12 @@ static int tps65200_probe(struct i2c_client *client,
 {
 	struct tps65200_i2c_client   *data = &tps65200_i2c_module;
 
-    if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C) == 0) {
+	if (i2c_check_functionality(client->adapter, I2C_FUNC_I2C) == 0) {
 		dev_dbg(&client->dev, "[TPS65200]:I2C fail\n");
 		return -EIO;
 		}
-	if ((machine_is_supersonic()&&(system_rev >= 1))||machine_is_bee())
-		register_notifier_cable_status(&cable_status_handler);
+
+	register_notifier_cable_status(&cable_status_handler);
 
 	data->address = client->addr;
 	data->client = client;

@@ -58,10 +58,10 @@ static const struct sdio_device_id sqn_sdio_ids[] = {
 MODULE_DEVICE_TABLE(sdio, sqn_sdio_ids);
 
 //HTC:WiMax power ON_OFF function and Card detect function
-extern int supersonic_wimax_power(int on);
-extern void supersonic_wimax_set_carddetect(int val);
-extern int supersonic_wimax_uart_switch(int uart);
-extern int supersonic_wimax_set_status(int on);
+extern int mmc_wimax_power(int on);
+extern void mmc_wimax_set_carddetect(int val);
+extern int mmc_wimax_uart_switch(int uart);
+extern int mmc_wimax_set_status(int on);
 
 /*******************************************************************/
 /* TX handlers                                                     */
@@ -469,7 +469,8 @@ static void sqn_sdio_release_wake_lock(struct sqn_sdio_card *card)
 
 	sqn_pr_enter();
 
-#define SQN_WAKE_LOCK_RELEASE_DELAY_SECONDS	5
+// #define SQN_WAKE_LOCK_RELEASE_DELAY_SECONDS	5
+#define SQN_WAKE_LOCK_RELEASE_DELAY_SECONDS	1
 
 	/* if TX and RX queues are empty, we will wait some time before
 	 * doing actual wake_lock release */
@@ -489,103 +490,6 @@ static void sqn_sdio_release_wake_lock(struct sqn_sdio_card *card)
 #undef SQN_WAKE_LOCK_RELEASE_DELAY_SECONDS
 	sqn_pr_leave();
 }
-
-// Andrew 0424 [
-// Unused so far
-// For SDC_CLK and GPIO40 wakeup registry
-/* This is a stub functions. They should be replaced with a real funcs from HTC driver */
-int stub_htc__is_sdio_clocks_on(void);
-int stub_htc__enable_sdio_clocks(int enable);
-
-static int __sdio_clocks = 1;
-
-int stub_htc__is_sdio_clocks_on(void)
-{
-	sqn_pr_enter();
-#if SDIO_CLK_DEBUG
-	sqn_pr_info("SDIO clocks status: %d\n", __sdio_clocks);
-#endif
-	sqn_pr_leave();
-	return __sdio_clocks;
-}
-
-int stub_htc__enable_sdio_clocks(int enable)
-{
-	int rv = 0;
-
-	sqn_pr_enter();
-
-#if SDIO_CLK_DEBUG
-	sqn_pr_info("set SDIO clocks to %d, was %d\n"
-		, enable, __sdio_clocks);
-#endif
-	__sdio_clocks = enable;
-
-	sqn_pr_leave();
-
-	return rv;
-}
-
-static void sqn_enable_gpio_irq(int enable)
-{
-	/* IRQ initially enabled by request_irq() */
-	static int gpio_irq_status = 1;
-
-	sqn_pr_enter();
-
-	if (enable) {
-		if (gpio_irq_status) {
-#if SDIO_CLK_DEBUG
-			sqn_pr_info("GPIO40 interrupt: already enabled\n");
-#endif
-		} else {
-#if SDIO_CLK_DEBUG
-			sqn_pr_info("enable GPIO40 interrupt\n");
-#endif
-			enable_irq(MSM_GPIO_TO_INT(40));
-			gpio_irq_status = 1;
-		}
-	} else {
-		if (gpio_irq_status) {
-#if SDIO_CLK_DEBUG
-			sqn_pr_info("disable GPIO40 interrupt\n");
-#endif
-			disable_irq(MSM_GPIO_TO_INT(40));
-			gpio_irq_status = 0;
-		} else {
-#if SDIO_CLK_DEBUG
-			sqn_pr_info("GPIO40 interrupt: already disabled\n");
-#endif
-		}
-	}
-
-	sqn_pr_leave();
-}
-
-static void sqn_sdio_disable_sdio_clocks(struct sqn_sdio_card *card)
-{
-	sqn_pr_enter();
-
-	/* if TX and RX queues are empty, we can disable SDIO clocks */
-	if (stub_htc__is_sdio_clocks_on()
-		&& skb_queue_empty(&card->tx_queue)
-		&& skb_queue_empty(&card->rx_queue))
-	{
-#if SDIO_CLK_DEBUG
-		sqn_pr_info("disable SDIO clocks\n");
-#endif
-
-		stub_htc__enable_sdio_clocks(0);
-		sqn_enable_gpio_irq(1);
-#if SDIO_CLK_DEBUG
-		sqn_pr_info("SDIO clocks disabled\n");
-#endif
-	}
-
-	sqn_pr_leave();
-}
-// Anrew 0424 ]
-
 
 static int sqn_sdio_host_to_card(struct sqn_private *priv)
 {
@@ -685,11 +589,12 @@ out:
         // Reset chip will cause WiMAX status to OFF and then SCAN, OPERATION
         // Reset WiMAX chip
 		// It could avoid we hang in SDIO CMD53 timeout and recovery wimax again.
-		sqn_pr_info("reset WiMAX chip\n");
-		supersonic_wimax_power(0);
-		mdelay(5);
-		supersonic_wimax_power(1);
 
+		sqn_pr_info("reset WiMAX chip\n");
+		mmc_wimax_power(0);
+		mdelay(5);
+		mmc_wimax_power(1);
+        
 		sqn_pr_err("card seems to be dead/removed - initiate reinitialization\n");
 		mmc_detect_change(card->func->card->host, 1);
 	}
@@ -1348,22 +1253,26 @@ out:
 
 
 extern u8 _g_card_sleeps;
+extern struct sqn_private *g_priv;
+struct msmsdcc_host;
+
+int msmsdcc_enable_clocks(struct msmsdcc_host *host);
 
 static irqreturn_t wimax_wakeup_gpio_irq_handler(int irq, void *dev_id)
 {
+	struct sqn_sdio_card *card = g_priv->card;
+	struct msmsdcc_host *msm_host = mmc_priv(card->func->card->host);
+
 	sqn_pr_enter();
+
 #if SDIO_CLK_DEBUG
-	sqn_pr_info("WiMAX GPIO interrupt\n");
+	/* Please, don't disable this log, it will be printed not often, only
+	 * once when host is in sleep mode */
+	// sqn_pr_info("WiMAX GPIO interrupt\n");
 #endif
 
-    /*
-    // Andrew 0424 unused.
-	if (!stub_htc__is_sdio_clocks_on()) {
-#if SDIO_CLK_DEBUG
-		sqn_pr_info("WiMAX GPIO IRQ: enable SDIO clocks\n");
-#endif 
-	}
-    */
+	msmsdcc_enable_clocks(msm_host);
+
 
 	sqn_pr_leave();
 	return IRQ_HANDLED;
@@ -1592,13 +1501,6 @@ static void sqn_sdio_remove(struct sdio_func *func)
 	if (!rv)
 		sqn_pr_warn("%s: failed to acquire RX mutex\n", __func__);
 
-	/* sqn_pr_info("wait until RX queue processing is finished\n"); */
-	/* count = 5; */
-	/* while (--count && !(rv = mutex_trylock(&sqn_card->rxq_mutex))) */
-		/* mdelay(delay); */
-	/* if (!rv) */
-		/* sqn_pr_warn("%s: failed to acquire RXQ mutex\n", __func__); */
-
 	sqn_stop_card(sqn_card->priv);
 	kthread_stop(sqn_card->priv->tx_thread);
 	wake_up_interruptible(&sqn_card->priv->tx_waitq);
@@ -1637,7 +1539,7 @@ static void sqn_sdio_remove(struct sdio_func *func)
 	sqn_pr_leave();
 }
 
-
+u8 sqn_is_gpio_irq_enabled = 0;
 int sqn_sdio_suspend(struct sdio_func *func, pm_message_t msg)
 {
 	int rv = 0;
@@ -1648,19 +1550,13 @@ int sqn_sdio_suspend(struct sdio_func *func, pm_message_t msg)
 	sqn_pr_info("%s: enter\n", __func__);
 	sqn_pr_dbg("pm_message = %x\n", msg.event);
 
-	if (!skb_queue_empty(&sqn_card->tx_queue)) {
-		sqn_pr_err("BANG!!! TX queue is not empty in suspend()"
-			" callback, queue len = %d\n"
-			, skb_queue_len(&sqn_card->tx_queue));
-		BUG();
-	}
+    WARN(!skb_queue_empty(&sqn_card->tx_queue)
+		, "BANG!!! TX queue is not empty in suspend(): %d"
+		, skb_queue_len(&sqn_card->tx_queue));
 
-	if (!skb_queue_empty(&sqn_card->rx_queue)) {
-		sqn_pr_err("BANG!!! RX queue is not empty in suspend()"
-			" callback, queue len = %d\n"
-			, skb_queue_len(&sqn_card->rx_queue));
-		BUG();
-	}
+    WARN(!skb_queue_empty(&sqn_card->rx_queue)
+		, "BANG!!! RX queue is not empty in suspend(): %d"
+		, skb_queue_len(&sqn_card->rx_queue));
 
 	if (sqn_card->is_card_sleeps) {
 		sqn_pr_info("card already asleep (pm_message = 0x%x)\n"
@@ -1680,9 +1576,12 @@ int sqn_sdio_suspend(struct sdio_func *func, pm_message_t msg)
 	}
 out:
 
-    sqn_pr_info("enable GPIO40 interrupt\n");
-    enable_irq(MSM_GPIO_TO_INT(40));
-    enable_irq_wake(MSM_GPIO_TO_INT(40));
+	if (!sqn_is_gpio_irq_enabled) {
+		sqn_pr_info("enable GPIO40 interrupt\n");
+		enable_irq(MSM_GPIO_TO_INT(40));
+		enable_irq_wake(MSM_GPIO_TO_INT(40));
+		sqn_is_gpio_irq_enabled = 1;
+	}
 
 	sqn_pr_info("%s: leave\n", __func__);
 	sqn_pr_leave();
@@ -1703,11 +1602,16 @@ int sqn_sdio_resume(struct sdio_func *func)
 		netif_wake_queue(sqn_card->priv->dev);
 	}
 
+	// Dima: we don't need this, card will be woken up when there will be
+	// some TX data
 	/* sqn_notify_host_wakeup(func); */
 
-	sqn_pr_info("disable GPIO40 interrupt\n"); 
-    disable_irq_wake(MSM_GPIO_TO_INT(40)); 
-    disable_irq(MSM_GPIO_TO_INT(40)); 
+	if (sqn_is_gpio_irq_enabled) {
+		sqn_pr_info("disable GPIO40 interrupt\n");
+		disable_irq_wake(MSM_GPIO_TO_INT(40));
+		disable_irq(MSM_GPIO_TO_INT(40));
+		sqn_is_gpio_irq_enabled = 0;
+	}
 
 	sqn_pr_info("%s: leave\n", __func__);
 	sqn_pr_leave();
@@ -1742,10 +1646,10 @@ static int __init sqn_sdio_init_module(void)
 	sqn_pr_info("Copyright SEQUANS Communications\n");
 
     // printk(KERN_WARNING "------------ %s ------------\n", __FUNCTION__);
-	supersonic_wimax_power(1);
-	supersonic_wimax_set_carddetect(1);
+	mmc_wimax_power(1);
+	mmc_wimax_set_carddetect(1);
     // thp_wimax_uart_switch(1);
-	supersonic_wimax_set_status(1);
+	mmc_wimax_set_status(1);
 	
 	rc = sdio_register_driver(&sqn_sdio_driver);
 
@@ -1772,10 +1676,10 @@ static void __exit sqn_sdio_exit_module(void)
 
 	sqn_pr_info("Driver has been removed\n");
 
-    supersonic_wimax_set_carddetect(0);
-	supersonic_wimax_power(0);
+    mmc_wimax_set_carddetect(0);
+	mmc_wimax_power(0);
 	// thp_wimax_uart_switch(0);
-	supersonic_wimax_set_status(0);
+	mmc_wimax_set_status(0);
 
 	sqn_pr_leave();
 }

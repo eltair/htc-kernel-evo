@@ -31,8 +31,6 @@
 #define ATMEL_EN_SYSFS
 #define ATMEL_I2C_RETRY_TIMES 10
 
-#define ENABLE_IME_IMPROVEMENT
-
 struct atmel_ts_data {
 	struct i2c_client *client;
 	struct input_dev *input_dev;
@@ -70,16 +68,6 @@ struct atmel_ts_data {
 	uint8_t noisethr;
 #ifdef ATMEL_EN_SYSFS
 	struct device dev;
-#endif
-#ifdef ENABLE_IME_IMPROVEMENT
-	int display_width;	/* display width in pixel */
-	int display_height;	/* display height in pixel */
-	int ime_threshold_pixel;	/* threshold in pixel */
-	int ime_threshold[2];		/* threshold X & Y in raw data */
-	int ime_area_pixel[4];		/* ime area in pixel */
-	int ime_area_pos[4];		/* ime area in raw data */
-	int ime_finger_report[2];
-	int ime_move;
 #endif
 
 };
@@ -365,181 +353,6 @@ static ssize_t atmel_debug_level_dump(struct device *dev,
 
 static DEVICE_ATTR(debug_level, 0644, atmel_debug_level_show, atmel_debug_level_dump);
 
-#ifdef ENABLE_IME_IMPROVEMENT
-static ssize_t ime_threshold_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
-{
-	struct atmel_ts_data *ts = private_ts;
-
-	return sprintf(buf, "%d\n", ts->ime_threshold_pixel);
-}
-
-static ssize_t ime_threshold_store(struct device *dev,
-				    struct device_attribute *attr,
-				    const char *buf, size_t count)
-{
-	struct atmel_ts_data *ts = private_ts;
-	char *ptr_data = (char *)buf;
-	unsigned long val;
-
-	val = simple_strtoul(ptr_data, NULL, 10);
-
-	if (val >= 0 && val <= max(ts->display_width, ts->display_height))
-		ts->ime_threshold_pixel = val;
-	else
-		ts->ime_threshold_pixel = 0;
-
-	ts->ime_threshold[0] = ts->ime_threshold_pixel * (ts->abs_x_max - ts->abs_x_min) / ts->display_width;
-	ts->ime_threshold[1] = ts->ime_threshold_pixel * (ts->abs_y_max - ts->abs_y_min) / ts->display_height;
-
-	return count;
-}
-
-static ssize_t ime_work_area_show(struct device *dev,
-				   struct device_attribute *attr, char *buf)
-{
-	struct atmel_ts_data *ts = private_ts;
-
-	return sprintf(buf, "%d,%d,%d,%d\n", ts->ime_area_pixel[0],
-			ts->ime_area_pixel[1], ts->ime_area_pixel[2], ts->ime_area_pixel[3]);
-}
-
-static ssize_t ime_work_area_store(struct device *dev,
-				    struct device_attribute *attr,
-				    const char *buf, size_t count)
-{
-	struct atmel_ts_data *ts = private_ts;
-	char *ptr_data = (char *)buf;
-	char *p;
-	int pt_count = 0;
-	unsigned long val[4];
-
-	while ((p = strsep(&ptr_data, ","))) {
-		if (!*p)
-			break;
-
-		if (pt_count >= 4)
-			break;
-
-		val[pt_count] = simple_strtoul(p, NULL, 10);
-
-		pt_count++;
-	}
-
-	if (pt_count >= 4 && ts->display_width && ts->display_height) {
-		ts->ime_area_pixel[0] = val[0]; /* Left */
-		ts->ime_area_pixel[1] = val[1]; /* Right */
-		ts->ime_area_pixel[2] = val[2]; /* Top */
-		ts->ime_area_pixel[3] = val[3]; /* Bottom */
-
-		if (val[0] < 0 || val[0] > ts->display_width)
-			ts->ime_area_pos[0] = 0;
-		else
-			ts->ime_area_pos[0] = val[0] * (ts->abs_x_max - ts->abs_x_min) / ts->display_width + ts->abs_x_min;
-
-		if (val[1] < 0 || val[1] > ts->display_width)
-			ts->ime_area_pos[1] = ts->abs_x_max;
-		else
-			ts->ime_area_pos[1] = val[1] * (ts->abs_x_max - ts->abs_x_min) / ts->display_width + ts->abs_x_min;
-
-		if (val[2] < 0 || val[2] > ts->display_height)
-			ts->ime_area_pos[2] = 0;
-		else
-			ts->ime_area_pos[2] = val[2] * (ts->abs_y_max - ts->abs_y_min) / ts->display_height + ts->abs_y_min;
-
-		if (val[3] < 0 || val[3] > ts->display_height)
-			ts->ime_area_pos[3] = ts->abs_y_max;
-		else
-			ts->ime_area_pos[3] = val[3] * (ts->abs_y_max - ts->abs_y_min) / ts->display_height + ts->abs_y_min;
-	}
-
-	return count;
-}
-
-static int ime_report_filter(struct atmel_ts_data *ts, uint8_t *data)
-{
-	int dx = 0;
-	int dy = 0;
-	int x = data[2] << 2 | data[4] >> 6;
-	int y = data[3] << 2 | (data[4] & 0x0C) >> 2;
-	uint8_t report_type = data[0] - ts->finger_type;
-	if (data[1] & 0x20) {
-		if (report_type == ts->ime_finger_report[1]) {
-			ts->ime_finger_report[1] = -1;
-			return 0;
-		} else if (report_type == ts->ime_finger_report[0]) {
-			if (ts->ime_finger_report[1] < 0) {
-#ifdef CONFIG_TOUCHSCREEN_COMPATIBLE_REPORT
-				input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0);
-				input_sync(ts->input_dev);
-#else
-				input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE, 0);
-				input_report_abs(ts->input_dev, ABS_MT_POSITION, 1 << 31);
-#endif
-				ts->ime_finger_report[0] = -1;
-				return 0;
-			} else {
-				ts->ime_finger_report[0] = ts->ime_finger_report[1];
-				report_type = ts->ime_finger_report[1];
-				ts->ime_finger_report[1] = -1;
-			}
-		}
-	} else if (data[1] & 0xC0) {
-		if ((x >= ts->ime_area_pos[0] && x <= ts->ime_area_pos[1]) &&
-			(y >= ts->ime_area_pos[2] && y <= ts->ime_area_pos[3])) {
-			if (ts->ime_finger_report[0] == report_type) {
-				dx = abs(x - ts->finger_data[report_type].x);
-				dy = abs(y - ts->finger_data[report_type].y);
-				if (dx < ts->ime_threshold[0] && dy < ts->ime_threshold[1] && !ts->ime_move)
-					   return 0;
-				else
-					ts->ime_move = 1;
-			}
-		}
-		ts->finger_data[report_type].x = x;
-		ts->finger_data[report_type].y = y;
-		ts->finger_data[report_type].w = data[5];
-		ts->finger_data[report_type].z = data[6];
-
-		if (ts->ime_finger_report[0] < 0) {
-			ts->ime_finger_report[0] = report_type;
-			ts->ime_move = 0;
-		} else if (ts->ime_finger_report[0] != report_type &&
-			(ts->ime_finger_report[1] < 0 || ts->ime_finger_report[1] == report_type)) {
-			ts->ime_finger_report[1] = report_type;
-			return 0;
-		}
-	}
-
-#ifdef CONFIG_TOUCHSCREEN_COMPATIBLE_REPORT
-	input_report_abs(ts->input_dev, ABS_MT_TOUCH_MAJOR,
-		ts->finger_data[report_type].z);
-	input_report_abs(ts->input_dev, ABS_MT_WIDTH_MAJOR,
-		ts->finger_data[report_type].w);
-	input_report_abs(ts->input_dev, ABS_MT_POSITION_X,
-		ts->finger_data[report_type].x);
-	input_report_abs(ts->input_dev, ABS_MT_POSITION_Y,
-		ts->finger_data[report_type].y);
-	input_mt_sync(ts->input_dev);
-	input_sync(ts->input_dev);
-#else
-	input_report_abs(ts->input_dev, ABS_MT_AMPLITUDE,
-		ts->finger_data[report_type].z << 16 | ts->finger_data[report_type].w);
-	input_report_abs(ts->input_dev, ABS_MT_POSITION,
-		1 << 31 |
-		ts->finger_data[report_type].x << 16 | ts->finger_data[report_type].y);
-#endif
-	return 0;
-}
-
-/* sys/class/input/inputX/ime_threshold */
-static DEVICE_ATTR(ime_threshold, 0666, ime_threshold_show,
-		ime_threshold_store);
-static DEVICE_ATTR(ime_work_area, 0666, ime_work_area_show,
-		ime_work_area_store);
-#endif
-
-
 static struct kobject *android_touch_kobj;
 
 static int atmel_touch_sysfs_init(void)
@@ -590,6 +403,36 @@ static void atmel_touch_sysfs_deinit(void)
 }
 
 #endif
+static int check_delta(struct atmel_ts_data*ts)
+{
+	int8_t data[128];
+	uint8_t loop_i;
+	int16_t rawdata, count = 0;
+
+	memset(data, 0xFF, sizeof(data));
+	i2c_atmel_write_byte_data(ts->client,
+		get_object_address(ts, GEN_COMMANDPROCESSOR_T6) + 5, 0x10);
+
+	for (loop_i = 0; !(data[0] == 0x10 && data[1] == 0x00) && loop_i < 10; loop_i++) {
+		msleep(5);
+		i2c_atmel_read(ts->client, get_object_address(ts, DIAGNOSTIC_T37), data, 2);
+	}
+	if (loop_i == 10)
+		printk(KERN_ERR "%s: Diag data not ready\n", __func__);
+
+	i2c_atmel_read(ts->client, get_object_address(ts, DIAGNOSTIC_T37), data, 128);
+	if (data[0] == 0x10 && data[1] == 0x00) {
+		for (loop_i = 2; loop_i < 127; loop_i += 2) {
+			rawdata = data[loop_i+1] << 8 | data[loop_i];
+			if (abs(rawdata) > 50)
+				count++;
+		}
+		if (count > 32)
+			return 1;
+	}
+	return 0;
+}
+
 static void check_calibration(struct atmel_ts_data*ts)
 {
 	uint8_t data[82];
@@ -657,7 +500,7 @@ static void atmel_ts_work_func(struct work_struct *work)
 	uint8_t data[ts->finger_support * 9];
 
 	uint8_t loop_i, loop_j, report_type, msg_num, msg_byte_num = 8, finger_report;
-	msg_num = (ts->finger_count && ts->id->version >= 0x15 && ts->ime_threshold_pixel)
+	msg_num = (ts->finger_count && ts->id->version >= 0x15)
 		? ts->finger_count : 1;
 
 	ret = i2c_atmel_read(ts->client, get_object_address(ts,
@@ -675,12 +518,6 @@ static void atmel_ts_work_func(struct work_struct *work)
 		if (report_type >= 0 && report_type < ts->finger_support) {
 			if (ts->calibration_confirm < 2 && ts->id->version >= 0x16)
 				check_calibration(ts);
-#ifdef ENABLE_IME_IMPROVEMENT
-				if (ts->ime_threshold_pixel > 0) {
-					ime_report_filter(ts, &data[0]);
-					break;
-				}
-#endif
 			ts->finger_data[report_type].x = data[loop_i * 9 + 2] << 2 | data[loop_i * 9 + 4] >> 6;
 			ts->finger_data[report_type].y = data[loop_i * 9 + 3] << 2 | (data[loop_i * 9 + 4] & 0x0C) >> 2;
 			ts->finger_data[report_type].w = data[loop_i * 9 + 5];
@@ -875,7 +712,7 @@ static irqreturn_t atmel_ts_irq_handler(int irq, void *dev_id)
 {
 	struct atmel_ts_data *ts = dev_id;
 
-	disable_irq(ts->client->irq);
+	disable_irq_nosync(ts->client->irq);
 	queue_work(ts->atmel_wq, &ts->work);
 	return IRQ_HANDLED;
 }
@@ -892,6 +729,15 @@ static void cable_tp_status_handler_func(int connected)
 			ts->status = 0;
 
 		if (ts->config_setting[1].config[0]) {
+			if (ts->status) {
+				ts->calibration_confirm = 2;
+				i2c_atmel_write_byte_data(ts->client,
+					get_object_address(ts, GEN_ACQUISITIONCONFIG_T8) + 6,
+					ts->config_setting[ts->status].config_T8[6]);
+				i2c_atmel_write_byte_data(ts->client,
+					get_object_address(ts, GEN_ACQUISITIONCONFIG_T8) + 7,
+					ts->config_setting[ts->status].config_T8[7]);
+			}
 			i2c_atmel_write_byte_data(ts->client,
 				get_object_address(ts, TOUCH_MULTITOUCHSCREEN_T9) + 7,
 				ts->config_setting[ts->status].config[0]);
@@ -1018,8 +864,7 @@ static int atmel_ts_probe(struct i2c_client *client,
 	if (data[1] & 0x24) {
 		printk(KERN_INFO "atmel_ts_probe(): init err: %x\n", data[1]);
 		goto err_detect_failed;
-	}
-	else {
+	} else {
 		for (loop_i = 0; loop_i < 10; loop_i++) {
 			if (gpio_get_value(intr)) {
 				printk(KERN_INFO "Touch: No more message\n");
@@ -1113,26 +958,31 @@ static int atmel_ts_probe(struct i2c_client *client,
 		if (pdata->object_crc[0]) {
 			ret = i2c_atmel_write_byte_data(client,
 				get_object_address(ts, GEN_COMMANDPROCESSOR_T6) + 2, 0x55);
-			msleep(32);
 			for (loop_i = 0; loop_i < 10; loop_i++) {
-				ret = i2c_atmel_read(ts->client, get_object_address(ts,
-					GEN_MESSAGEPROCESSOR_T5), data, 9);
-				if (data[0] == get_report_ids_size(ts, GEN_COMMANDPROCESSOR_T6))
-					break;
-				msleep(5);
-			}
-			for (loop_i = 0; loop_i < 3; loop_i++) {
-				if (pdata->object_crc[loop_i] != data[loop_i + 2]) {
-					printk(KERN_ERR"CRC Error: %x, %x\n", pdata->object_crc[loop_i], data[loop_i + 2]);
-					break;
+				if (!gpio_get_value(intr)) {
+					ret = i2c_atmel_read(ts->client, get_object_address(ts,
+						GEN_MESSAGEPROCESSOR_T5), data, 5);
+					if (data[0] == get_report_ids_size(ts, GEN_COMMANDPROCESSOR_T6))
+						break;
 				}
+				msleep(10);
 			}
-			if (loop_i == 3) {
-				printk(KERN_INFO "CRC passed: ");
-				for (loop_i = 0; loop_i < 3; loop_i++)
-					printk("0x%2.2X ", pdata->object_crc[loop_i]);
-				printk("\n");
-				CRC_check = 1;
+			if (loop_i == 10)
+				printk(KERN_INFO "Touch: No checksum read\n");
+			else {
+				for (loop_i = 0; loop_i < 3; loop_i++) {
+					if (pdata->object_crc[loop_i] != data[loop_i + 2]) {
+						printk(KERN_ERR"CRC Error: %x, %x\n", pdata->object_crc[loop_i], data[loop_i + 2]);
+						break;
+					}
+				}
+				if (loop_i == 3) {
+					printk(KERN_INFO "CRC passed: ");
+					for (loop_i = 0; loop_i < 3; loop_i++)
+						printk("0x%2.2X ", pdata->object_crc[loop_i]);
+					printk("\n");
+					CRC_check = 1;
+				}
 			}
 		}
 		ts->abs_x_min = pdata->abs_x_min;
@@ -1150,12 +1000,7 @@ static int atmel_ts_probe(struct i2c_client *client,
 		ts->filter_level = pdata->filter_level;
 		printk(KERN_INFO "filter_level: %d, %d, %d, %d\n",
 			ts->filter_level[0], ts->filter_level[1], ts->filter_level[2], ts->filter_level[3]);
-#ifdef ENABLE_IME_IMPROVEMENT
-		ts->display_width = pdata->display_width;
-		ts->display_height = pdata->display_height;
-		if (!ts->display_width || !ts->display_height)
-			ts->display_width = ts->display_height = 1;
-#endif
+
 		ts->config_setting[0].config_T7
 			= ts->config_setting[1].config_T7
 			= pdata->config_T7;
@@ -1187,7 +1032,6 @@ static int atmel_ts_probe(struct i2c_client *client,
 				ts->GCAF_sample = ts->config_setting[ts->status].config_T28[4];
 			}
 		}
-
 		if (usb_get_connect_type())
 			ts->status = 1;
 
@@ -1239,12 +1083,17 @@ static int atmel_ts_probe(struct i2c_client *client,
 				msleep(10);
 			}
 
-			i2c_atmel_read(client, get_object_address(ts, GEN_MESSAGEPROCESSOR_T5), data, 8);
+			i2c_atmel_read(client, get_object_address(ts, GEN_MESSAGEPROCESSOR_T5), data, 7);
 			printk(KERN_INFO "Touch: 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X\n",
 				data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
 
 			ret = i2c_atmel_write_byte_data(client, get_object_address(ts, GEN_COMMANDPROCESSOR_T6), 0x11);
 			msleep(64);
+
+			i2c_atmel_read(client, get_object_address(ts, GEN_MESSAGEPROCESSOR_T5), data, 7);
+			printk(KERN_INFO "Touch: 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X 0x%2.2X\n",
+				data[0], data[1], data[2], data[3], data[4], data[5], data[6]);
+			/* For Ace */
 		}
 
 		if (ts->status) {
@@ -1263,7 +1112,7 @@ static int atmel_ts_probe(struct i2c_client *client,
 				if (ts->config_setting[1].config_T7 != NULL)
 					i2c_atmel_write(ts->client,
 						get_object_address(ts, GEN_POWERCONFIG_T7),
-						ts->config_setting[ts->status].config_T7,
+						ts->config_setting[1].config_T7,
 						get_object_size(ts, GEN_POWERCONFIG_T7));
 				if (ts->config_setting[1].config_T8 != NULL)
 					i2c_atmel_write(ts->client,
@@ -1331,25 +1180,6 @@ static int atmel_ts_probe(struct i2c_client *client,
 			client->name, ts);
 	if (ret)
 		dev_err(&client->dev, "request_irq failed\n");
-#ifdef ENABLE_IME_IMPROVEMENT
-		ts->ime_threshold_pixel = 0;
-		ts->ime_finger_report[0] = -1;
-		ts->ime_finger_report[1] = -1;
-		ret = device_create_file(&ts->input_dev->dev, &dev_attr_ime_threshold);
-		if (ret) {
-			printk(KERN_ERR "ENABLE_IME_IMPROVEMENT: "
-					"Error to create ime_threshold\n");
-			goto err_input_register_device_failed;
-		}
-		ret = device_create_file(&ts->input_dev->dev, &dev_attr_ime_work_area);
-		if (ret) {
-			printk(KERN_ERR "ENABLE_IME_IMPROVEMENT: "
-					"Error to create ime_work_area\n");
-			device_remove_file(&ts->input_dev->dev,
-					   &dev_attr_ime_threshold);
-			goto err_input_register_device_failed;
-		}
-#endif
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	ts->early_suspend.level = EARLY_SUSPEND_LEVEL_STOP_DRAWING - 1;
@@ -1395,10 +1225,6 @@ static int atmel_ts_remove(struct i2c_client *client)
 #ifdef ATMEL_EN_SYSFS
 	atmel_touch_sysfs_deinit();
 #endif
-#ifdef ENABLE_IME_IMPROVEMENT
-	device_remove_file(&ts->input_dev->dev, &dev_attr_ime_threshold);
-	device_remove_file(&ts->input_dev->dev, &dev_attr_ime_work_area);
-#endif
 
 	unregister_early_suspend(&ts->early_suspend);
 	free_irq(client->irq, ts);
@@ -1432,11 +1258,6 @@ static int atmel_ts_suspend(struct i2c_client *client, pm_message_t mesg)
 	i2c_atmel_write_byte_data(client,
 		get_object_address(ts, GEN_POWERCONFIG_T7) + 1, 0x0);
 
-#ifdef ENABLE_IME_IMPROVEMENT
-		ts->ime_finger_report[0] = -1;
-		ts->ime_finger_report[1] = -1;
-#endif
-
 	return 0;
 }
 
@@ -1446,9 +1267,15 @@ static int atmel_ts_resume(struct i2c_client *client)
 
 	i2c_atmel_write(ts->client, get_object_address(ts, GEN_POWERCONFIG_T7),
 		ts->config_setting[ts->status].config_T7, get_object_size(ts, GEN_POWERCONFIG_T7));
-	if (ts->status)
+	if (ts->config_setting[1].config[0] && ts->status && !check_delta(ts)) {
 		ts->calibration_confirm = 2;
-	else {
+		i2c_atmel_write_byte_data(ts->client,
+			get_object_address(ts, GEN_ACQUISITIONCONFIG_T8) + 6,
+			ts->config_setting[ts->status].config_T8[6]);
+		i2c_atmel_write_byte_data(ts->client,
+			get_object_address(ts, GEN_ACQUISITIONCONFIG_T8) + 7,
+			ts->config_setting[ts->status].config_T8[7]);
+	} else {
 		ts->calibration_confirm = 0;
 		i2c_atmel_write_byte_data(client,
 			get_object_address(ts, GEN_COMMANDPROCESSOR_T6) + 2, 0x55);

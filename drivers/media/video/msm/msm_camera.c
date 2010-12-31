@@ -292,11 +292,19 @@ static int msm_pmem_frame_ptov_lookup(struct msm_sync *sync,
 
 	hlist_for_each_entry_safe(region, node, n, &sync->pmem_frames, list) {
 		if (pyaddr == (region->paddr + region->info.y_off) &&
+#ifndef CONFIG_ARCH_MSM7225
 				pcbcraddr == (region->paddr +
 						region->info.cbcr_off) &&
+#endif
 				region->info.vfe_can_write) {
 			*pmem_region = region;
 			region->info.vfe_can_write = !take_from_vfe;
+#ifdef CONFIG_ARCH_MSM7225
+			if (pcbcraddr != (region->paddr + region->info.cbcr_off)) {
+				pr_err("%s cbcr addr = %lx, NOT EQUAL to region->paddr + region->info.cbcr_off = %lx\n",
+					__func__, pcbcraddr, region->paddr + region->info.cbcr_off);
+			}
+#endif
 			return 0;
 		}
 	}
@@ -2717,7 +2725,7 @@ EXPORT_SYMBOL(msm_v4l2_unregister);
 static int msm_sync_init(struct msm_sync *sync,
 		struct platform_device *pdev,
 		int (*sensor_probe)(struct msm_camera_sensor_info *,
-				struct msm_sensor_ctrl *))
+				struct msm_sensor_ctrl *), int camera_node)
 {
 	int rc = 0;
 	struct msm_sensor_ctrl sctrl;
@@ -2733,6 +2741,8 @@ static int msm_sync_init(struct msm_sync *sync,
 	rc = msm_camio_probe_on(pdev);
 	if (rc < 0)
 		return rc;
+	sctrl.node = camera_node;
+	pr_info("sctrl.node %d\n", sctrl.node);
 	rc = sensor_probe(sync->sdata, &sctrl);
 	if (rc >= 0) {
 		sync->pdev = pdev;
@@ -2814,7 +2824,7 @@ int msm_camera_drv_start(struct platform_device *dev,
 	struct msm_device *pmsm = NULL;
 	struct msm_sync *sync;
 	int rc = -ENODEV;
-	static int camera_node;
+	static int camera_node = 0;
 
 	if (camera_node >= MSM_MAX_CAMERA_SENSORS) {
 		pr_err("%s: too many camera sensors\n", __func__);
@@ -2847,7 +2857,7 @@ int msm_camera_drv_start(struct platform_device *dev,
 		return -ENOMEM;
 	sync = (struct msm_sync *)(pmsm + 3);
 
-	rc = msm_sync_init(sync, dev, sensor_probe);
+	rc = msm_sync_init(sync, dev, sensor_probe, camera_node);
 	if (rc < 0) {
 		kfree(pmsm);
 		return rc;

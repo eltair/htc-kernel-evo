@@ -29,7 +29,7 @@
 #include <mach/msm_fb.h>
 #include <mach/msm_iomap.h>
 #include <mach/vreg.h>
-#include <mach/pmic.h>
+/* #include <mach/pmic.h> */
 
 #include "board-supersonic.h"
 #include "devices.h"
@@ -630,11 +630,7 @@ static int backlight_control(int on)
 		buf[0] = 0x91;
 
 	while (max_retry--) {
-		if (adap)
-			ret = i2c_transfer(adap, &msg, 1);
-		else
-			break;
-
+		ret = i2c_transfer(adap, &msg, 1);
 		if (ret != 1)
 			msleep(1);
 		else {
@@ -883,9 +879,6 @@ int __init supersonic_init_panel(void)
 {
 	int rc;
 
-	if (!machine_is_supersonic())
-		return -1;
-
 	B(KERN_INFO "%s: enter.\n", __func__);
 
 	vreg_lcd_1v8 = vreg_get(0, "gp4");
@@ -897,9 +890,9 @@ int __init supersonic_init_panel(void)
 		return PTR_ERR(vreg_lcd_2v8);
 
 	if (panel_type == PANEL_SHARP)
-		mdp_pdata.ignore_pixel_data_attr = 1;
+		mdp_pdata.overrides |= MSM_MDP_PANEL_IGNORE_PIXEL_DATA;
 	else
-		mdp_pdata.ignore_pixel_data_attr = 0;
+		mdp_pdata.overrides &= ~MSM_MDP_PANEL_IGNORE_PIXEL_DATA;
 
 	msm_device_mdp.dev.platform_data = &mdp_pdata;
 	rc = platform_device_register(&msm_device_mdp);
@@ -926,5 +919,3 @@ int __init supersonic_init_panel(void)
 
 	return 0;
 }
-
-device_initcall(supersonic_init_panel);

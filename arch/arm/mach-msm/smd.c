@@ -76,9 +76,18 @@ static unsigned last_heap_free = 0xffffffff;
 
 #define MSM_A2M_INT(n) (MSM_CSR_BASE + 0x400 + (n) * 4)
 
+#if defined(CONFIG_ARCH_MSM7X30)
+#define MSM_TRIG_A2M_INT(n) (writel(1 << n, MSM_GCC_BASE + 0x8))
+#endif
+
 static inline void notify_other_smsm(void)
 {
+#if defined(CONFIG_ARCH_MSM7X30)
+	MSM_TRIG_A2M_INT(5);
+#else
 	writel(1, MSM_A2M_INT(5));
+#endif
+
 #ifdef CONFIG_QDSP6
 	writel(1, MSM_A2M_INT(8));
 #endif
@@ -86,12 +95,20 @@ static inline void notify_other_smsm(void)
 
 static inline void notify_modem_smd(void)
 {
+#if defined(CONFIG_ARCH_MSM7X30)
+	MSM_TRIG_A2M_INT(0);
+#else
 	writel(1, MSM_A2M_INT(0));
+#endif
 }
 
 static inline void notify_dsp_smd(void)
 {
+#if defined(CONFIG_ARCH_MSM7X30)
+	MSM_TRIG_A2M_INT(8);
+#else
 	writel(1, MSM_A2M_INT(8));
+#endif
 }
 
 static void smd_diag(void)
@@ -364,22 +381,17 @@ static void update_packet_state(struct smd_channel *ch)
 	int r;
 
 	/* can't do anything if we're in the middle of a packet */
-	while (ch->current_packet == 0) {
-		/* discard 0 length packets if any */
+	if (ch->current_packet != 0)
+		return;
 
-		/* don't bother unless we can get the full header */
-		if (smd_stream_read_avail(ch) < SMD_HEADER_SIZE)
-			return;
+	/* don't bother unless we can get the full header */
+	if (smd_stream_read_avail(ch) < SMD_HEADER_SIZE)
+		return;
 
-		r = ch_read(ch, hdr, SMD_HEADER_SIZE);
-		BUG_ON(r != SMD_HEADER_SIZE);
+	r = ch_read(ch, hdr, SMD_HEADER_SIZE);
+	BUG_ON(r != SMD_HEADER_SIZE);
 
-		/*hdr[0] will be set to > 8192 sometimes and then smd won't remove smd packet header*/
-		if (hdr[0] > 8192)
-			return;
-
-		ch->current_packet = hdr[0];
-	}
+	ch->current_packet = hdr[0];
 }
 
 /* provide a pointer and length to next free space in the fifo */
@@ -845,8 +857,10 @@ int smd_open(const char *name, smd_channel_t **_ch,
 	}
 
 	ch = smd_get_channel(name);
-	if (!ch)
+	if (!ch){
+		pr_info("smd_open() fail, because radio no open %s smd chnnel\n",name);
 		return -ENODEV;
+	}
 
 	if (notify == 0)
 		notify = do_nothing_notify;

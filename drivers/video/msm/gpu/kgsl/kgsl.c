@@ -168,7 +168,7 @@ static void kgsl_hw_put_locked(bool start_timer)
 {
 	if ((--kgsl_driver.active_cnt == 0) && start_timer) {
 		mod_timer(&kgsl_driver.standby_timer,
-			  jiffies + msecs_to_jiffies(200));
+			  jiffies + msecs_to_jiffies(512));
 	}
 }
 
@@ -256,11 +256,9 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 		kgsl_remove_mem_entry(entry);
 
 	if (private->pagetable != NULL) {
-#ifdef PER_PROCESS_PAGE_TABLE
 		kgsl_yamato_cleanup_pt(&kgsl_driver.yamato_device,
 					private->pagetable);
 		kgsl_mmu_destroypagetableobject(private->pagetable);
-#endif
 		private->pagetable = NULL;
 	}
 
@@ -284,6 +282,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	struct kgsl_file_private *private = NULL;
 
 	KGSL_DRV_DBG("file %p pid %d\n", filep, task_pid_nr(current));
+
 
 	if (filep->f_flags & O_EXCL) {
 		KGSL_DRV_ERR("O_EXCL not allowed\n");
@@ -314,22 +313,19 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	kgsl_hw_get_locked();
 
 	/*NOTE: this must happen after first_open */
-#ifdef PER_PROCESS_PAGE_TABLE
 	private->pagetable =
 		kgsl_mmu_createpagetableobject(&kgsl_driver.yamato_device.mmu);
 	if (private->pagetable == NULL) {
 		result = -ENOMEM;
 		goto done;
 	}
-	result = kgsl_yamato_setup_pt(device, private->pagetable);
+	result = kgsl_yamato_setup_pt(&kgsl_driver.yamato_device,
+					private->pagetable);
 	if (result) {
 		kgsl_mmu_destroypagetableobject(private->pagetable);
 		private->pagetable = NULL;
 		goto done;
 	}
-#else
-	private->pagetable = kgsl_driver.yamato_device.mmu.hwpagetable;
-#endif
 	private->vmalloc_size = 0;
 done:
 	kgsl_hw_put_locked(true);
@@ -433,14 +429,12 @@ static long kgsl_ioctl_device_waittimestamp(struct kgsl_file_private *private,
 		goto done;
 	}
 
-	mutex_unlock(&kgsl_driver.mutex);
 	/* Don't wait forever, set a max value for now */
 	if (param.timeout == -1)
 		param.timeout = 10 * MSEC_PER_SEC;
 	result = kgsl_yamato_waittimestamp(&kgsl_driver.yamato_device,
 				     param.timestamp,
 				     param.timeout);
-	mutex_lock(&kgsl_driver.mutex);
 
 	kgsl_yamato_runpending(&kgsl_driver.yamato_device);
 done:

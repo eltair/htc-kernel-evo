@@ -330,6 +330,12 @@ static void qmi_process_unicast_wds_msg(struct qmi_ctxt *ctxt,
 				ctxt->state = STATE_OFFLINE;
 				ctxt->state_dirty = 1;
 			}
+			if (msg->size == 0x000c && (msg->tlv)[10] == 0x0c) {
+				printk(KERN_ERR
+					"qmi: wds: pdp activation failed. Cause: Operator-determined barring\n");
+				ctxt->state = STATE_OFFLINE;
+				ctxt->state_dirty = 1;
+			}
 		} else if (qmi_get_tlv(msg, 0x01, sizeof(ctxt->wds_handle), &ctxt->wds_handle)) {
 			printk(KERN_INFO
 			       "qmi: wds no handle?\n");

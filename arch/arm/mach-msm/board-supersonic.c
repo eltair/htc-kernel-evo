@@ -27,8 +27,6 @@
 #include <linux/android_pmem.h>
 #include <linux/synaptics_t1007.h>
 #include <linux/input.h>
-#include <mach/htc_headset_common.h>
-#include <mach/audio_jack.h>
 #include <linux/akm8973.h>
 #include <mach/tpa2018d1.h>
 #include <linux/bma150.h>
@@ -38,6 +36,9 @@
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
 #include <asm/setup.h>
+#include <mach/htc_headset_mgr.h>
+#include <mach/htc_headset_gpio.h>
+#include <mach/htc_headset_microp.h>
 
 #include <mach/board.h>
 #include <mach/board_htc.h>
@@ -45,6 +46,7 @@
 #include <mach/camera.h>
 #include <mach/msm_iomap.h>
 #include <mach/htc_battery.h>
+#include <mach/htc_usb.h>
 #include <mach/perflock.h>
 #include <mach/msm_serial_debugger.h>
 #include <mach/system.h>
@@ -102,13 +104,6 @@ static struct platform_device htc_battery_pdev = {
 #ifdef CONFIG_MICROP_COMMON
 static int capella_cm3602_power(int pwr_device, uint8_t enable);
 static struct microp_function_config microp_functions[] = {
-	{
-		.name   = "remote-key",
-		.category = MICROP_FUNCTION_REMOTEKEY,
-		.levels = {0, 33, 50, 110, 160, 220},
-		.channel = 1,
-		.int_pin = 1 << 7,
-	},
 	{
 		.name   = "reset-int",
 		.category = MICROP_FUNCTION_RESET_INT,
@@ -215,6 +210,13 @@ static struct capella_cm3602_platform_data capella_cm3602_pdata = {
 };
 /* End Proximity Sensor (Capella_CM3602)*/
 
+static struct htc_headset_microp_platform_data htc_headset_microp_data = {
+	.remote_int		= 1 << 7,
+	.remote_irq		= MSM_uP_TO_INT(7),
+	.remote_enable_pin	= NULL,
+	.adc_channel		= 0x01,
+	.adc_remote		= {0, 33, 50, 110, 160, 220},
+};
 
 static struct platform_device microp_devices[] = {
 	{
@@ -241,6 +243,13 @@ static struct platform_device microp_devices[] = {
 		.id = -1,
 		.dev = {
 			.platform_data = &capella_cm3602_pdata,
+		},
+	},
+	{
+		.name	= "HTC_HEADSET_MICROP",
+		.id	= -1,
+		.dev	= {
+			.platform_data	= &htc_headset_microp_data,
 		},
 	},
 };
@@ -277,63 +286,6 @@ static struct platform_device supersonic_leds = {
 	},
 };
 
-extern void msm_hsusb_8x50_phy_reset(void);
-static int supersonic_phy_init_seq[] = { 0xC, 0x31, 0x30, 0x32, 0x1D, 0x0D, 0x1D, 0x10, -1 };
-static struct msm_hsusb_product supersonic_usb_products[] = {
-	{
-		.product_id	= 0x0ff9,
-		.functions	= 0x00000001, /* usb_mass_storage */
-	},
-	{
-		.product_id	= 0x0c8d,
-		.functions	= 0x00000003, /* usb_mass_storage + adb */
-	},
-	{
-		.product_id	= 0x0c03,
-		.functions	= 0x00000101, /* modem + mass_storage */
-	},
-	{
-		.product_id	= 0x0c04,
-		.functions	= 0x00000103, /* modem + adb + mass_storage */
-	},
-	{
-		.product_id	= 0x0c05,
-		.functions	= 0x00000021, /* Projector + mass_storage */
-	},
-	{
-		.product_id	= 0x0c06,
-		.functions	= 0x00000023, /* Projector + adb + mass_storage */
-	},
-	{
-		.product_id	= 0x0c07,
-		.functions	= 0x0000000B, /* diag + adb + mass_storage */
-	},
-	{
-		.product_id	= 0x0c08,
-		.functions	= 0x00000009, /* diag + mass_storage */
-	},
-	{
-		.product_id	= 0x0c88,
-		.functions	= 0x0000010B, /* adb + mass_storage + diag + modem */
-	},
-	{
-		.product_id	= 0x0c89,
-		.functions	= 0x00000019, /* serial + diag + mass_storage */
-	},
-	{
-		.product_id	= 0x0c8a,
-		.functions	= 0x0000001B, /* serial + diag + adb + mass_storage */
-	},
-	{
-		.product_id	= 0x0c93,
-		.functions	= 0x00000080, /* mtp */
-	},
-	{
-		.product_id	= 0x0FFE,
-		.functions	= 0x00000004, /* internet sharing */
-	},
-};
-
 /* 2 : wimax UART, 1 : CPU uart, 0 : usb
 CPU_WIMAX_SW -> GPIO160
 USB_UART#_SW -> GPIO33
@@ -346,29 +298,114 @@ XB : GPIO33 = 0 -> USB
     GPIO33 = 1 , GPIO160 = 1 -> Wimax UART   // SUPERSONIC_USB_UARTz_SW (GPIO33)
 */
 
-
-// USB cable out: supersonic_uart_usb_switch(1)
-// USB cable in: supersonic_uart_usb_switch(0)
+/*
+ * USB cable out: supersonic_uart_usb_switch(1)
+ * USB cable in: supersonic_uart_usb_switch(0)
+ */
 static void supersonic_uart_usb_switch(int uart)
 {
 	printk(KERN_INFO "%s:uart:%d\n", __func__, uart); 
-	gpio_set_value(SUPERSONIC_USB_UARTz_SW, uart?1:0); // XA and for USB cable in to reset wimax UART
+	/* XA and for USB cable in to reset wimax UART */
+	gpio_set_value(SUPERSONIC_USB_UARTz_SW, uart?1:0);
 
-	if(system_rev && uart) // XB
-	{		
-		if (gpio_get_value(SUPERSONIC_WIMAX_CPU_UARTz_SW))  // Wimax UART
-	    {
+	if (system_rev && uart) {/* XB */
+		/* Winmax uart */
+		if (gpio_get_value(SUPERSONIC_WIMAX_CPU_UARTz_SW)) {
 			printk(KERN_INFO "%s:Wimax UART\n", __func__);
 			gpio_set_value(SUPERSONIC_USB_UARTz_SW,1);
 			gpio_set_value(SUPERSONIC_WIMAX_CPU_UARTz_SW,1);
-		}		
-		else // USB, CPU UART
-		{
+		} else {/* USB, CPU UART */
 			printk(KERN_INFO "%s:Non wimax UART\n", __func__);
 			gpio_set_value(SUPERSONIC_WIMAX_CPU_UARTz_SW, uart==2?1:0);
 		}
 	}
 }
+
+static uint32_t usb_phy_3v3_table[] = {
+	PCOM_GPIO_CFG(SUPERSONIC_USB_PHY_3V3_ENABLE, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA)
+};
+
+static uint32_t usb_ID_PIN_input_table[] = {
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_USB_ID_PIN, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_4MA),
+};
+
+static uint32_t usb_ID_PIN_ouput_table[] = {
+	PCOM_GPIO_CFG(SUPERSONIC_GPIO_USB_ID_PIN, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),
+};
+
+void config_supersonic_usb_id_gpios(bool output)
+{
+	if (output) {
+		config_gpio_table(usb_ID_PIN_ouput_table,
+			ARRAY_SIZE(usb_ID_PIN_ouput_table));
+		gpio_set_value(SUPERSONIC_GPIO_USB_ID_PIN, 1);
+		printk(KERN_INFO "%s %d output high\n",  __func__, SUPERSONIC_GPIO_USB_ID_PIN);
+	} else {
+		config_gpio_table(usb_ID_PIN_input_table,
+			ARRAY_SIZE(usb_ID_PIN_input_table));
+		printk(KERN_INFO "%s %d input none pull\n",  __func__, SUPERSONIC_GPIO_USB_ID_PIN);
+	}
+}
+
+static int supersonic_phy_init_seq[] = { 0xC, 0x31, 0x30, 0x32, 0x1D, 0x0D, 0x1D, 0x10, -1 };
+#ifdef CONFIG_USB_ANDROID
+static struct msm_hsusb_platform_data msm_hsusb_pdata = {
+	.phy_init_seq		= supersonic_phy_init_seq,
+	.phy_reset		= msm_hsusb_8x50_phy_reset,
+	.usb_id_pin_gpio =  SUPERSONIC_GPIO_USB_ID_PIN,
+	.accessory_detect = 1, /* detect by ID pin gpio */
+	.usb_uart_switch = supersonic_uart_usb_switch,
+};
+
+static struct usb_mass_storage_platform_data mass_storage_pdata = {
+	.nluns		= 1,
+	.vendor		= "HTC",
+	.product	= "Android Phone",
+	.release	= 0x0100,
+};
+
+static struct platform_device usb_mass_storage_device = {
+	.name	= "usb_mass_storage",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &mass_storage_pdata,
+	},
+};
+
+static struct android_usb_platform_data android_usb_pdata = {
+	.vendor_id	= 0x0bb4,
+	.product_id	= 0x0c8d,
+	.version	= 0x0100,
+	.product_name		= "Android Phone",
+	.manufacturer_name	= "HTC",
+	.num_products = ARRAY_SIZE(usb_products),
+	.products = usb_products,
+	.num_functions = ARRAY_SIZE(usb_functions_all),
+	.functions = usb_functions_all,
+};
+
+static struct platform_device android_usb_device = {
+	.name	= "android_usb",
+	.id		= -1,
+	.dev		= {
+		.platform_data = &android_usb_pdata,
+	},
+};
+static void suc_add_usb_devices(void)
+{
+	android_usb_pdata.products[0].product_id =
+		android_usb_pdata.product_id;
+	android_usb_pdata.serial_number = board_serialno();
+	msm_hsusb_pdata.serial_number = board_serialno();
+	msm_device_hsusb.dev.platform_data = &msm_hsusb_pdata;
+	config_supersonic_usb_id_gpios(0);
+	config_gpio_table(usb_phy_3v3_table, ARRAY_SIZE(usb_phy_3v3_table));
+	gpio_set_value(SUPERSONIC_USB_PHY_3V3_ENABLE, 1);
+	platform_device_register(&msm_device_hsusb);
+	platform_device_register(&usb_mass_storage_device);
+	platform_device_register(&android_usb_device);
+}
+#endif
 
 static struct platform_device supersonic_rfkill = {
 	.name = "supersonic_rfkill",
@@ -437,6 +474,7 @@ static struct resource qsd_spi_resources[] = {
 		.flags  = IORESOURCE_IRQ,
 	},
 };
+
 static struct spi_platform_data supersonic_spi_pdata = {
 	.clk_rate	= 1200000,
 };
@@ -512,14 +550,6 @@ static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.cached		= 1,
 };
 
-static struct android_pmem_platform_data android_pmem_camera_pdata = {
-	.name		= "pmem_camera",
-	.start		= MSM_PMEM_CAMERA_BASE,
-	.size		= MSM_PMEM_CAMERA_SIZE,
-	.no_allocator	= 1,
-	.cached		= 1,
-};
-
 static struct android_pmem_platform_data android_pmem_venc_pdata = {
 	.name		= "pmem_venc",
 	.start		= MSM_PMEM_VENC_BASE,
@@ -576,14 +606,6 @@ static struct platform_device android_pmem_adsp_device = {
 	.id		= 4,
 	.dev		= {
 		.platform_data = &android_pmem_adsp_pdata,
-	},
-};
-
-static struct platform_device android_pmem_camera_device = {
-	.name		= "android_pmem",
-	.id		= 5,
-	.dev		= {
-		.platform_data = &android_pmem_camera_pdata,
 	},
 };
 
@@ -658,8 +680,6 @@ static int supersonic_atmel_ts_power(int on)
 struct atmel_i2c_platform_data supersonic_atmel_ts_data[] = {
 	{
 		.version = 0x016,
-		.display_width = 480,
-		.display_height = 800,
 		.abs_x_min = 34,
 		.abs_x_max = 990,
 		.abs_y_min = 15,
@@ -673,7 +693,7 @@ struct atmel_i2c_platform_data supersonic_atmel_ts_data[] = {
 		.config_T6 = {0, 0, 0, 0, 0, 0},
 		.config_T7 = {50, 15, 50},
 		.config_T8 = {10, 0, 20, 10, 0, 0, 5, 0},
-		.config_T9 = {139, 0, 0, 18, 12, 0, 16, 32, 3, 5, 0, 5, 2, 14, 2, 10, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 143, 25, 146, 10, 40},
+		.config_T9 = {139, 0, 0, 18, 12, 0, 16, 32, 3, 5, 0, 5, 2, 14, 2, 10, 25, 10, 0, 0, 0, 0, 0, 0, 0, 0, 143, 25, 146, 10, 20},
 		.config_T15 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		.config_T19 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 		.config_T20 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -683,7 +703,7 @@ struct atmel_i2c_platform_data supersonic_atmel_ts_data[] = {
 		.config_T25 = {3, 0, 200, 50, 64, 31, 0, 0, 0, 0, 0, 0, 0, 0},
 		.config_T27 = {0, 0, 0, 0, 0, 0, 0},
 		.config_T28 = {0, 0, 2, 4, 8, 60},
-		.object_crc = {0x63, 0x27, 0x8E},
+		.object_crc = {0x0D, 0x1C, 0x8E},
 		.cable_config = {30, 30, 8, 16},
 		.GCAF_level = {20, 24, 28, 40, 63},
 		.filter_level = {46, 100, 923, 978},
@@ -791,26 +811,28 @@ static struct regulator_init_data tps65023_data[5] = {
 	},
 };
 
-static struct h2w_platform_data supersonic_h2w_data = {
+static struct htc_headset_mgr_platform_data htc_headset_mgr_data = {
 };
 
-static struct platform_device supersonic_h2w = {
-	.name		= "htc_headset",
-	.id			= -1,
-	.dev		= {
-		.platform_data	= &supersonic_h2w_data,
+static struct platform_device htc_headset_mgr = {
+	.name	= "HTC_HEADSET_MGR",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &htc_headset_mgr_data,
 	},
 };
 
-static struct audio_jack_platform_data supersonic_jack_data = {
-	.gpio	= SUPERSONIC_GPIO_35MM_HEADSET_DET,
+static struct htc_headset_gpio_platform_data htc_headset_gpio_data = {
+	.hpin_gpio		= SUPERSONIC_GPIO_35MM_HEADSET_DET,
+	.key_enable_gpio	= NULL,
+	.mic_select_gpio	= NULL,
 };
 
-static struct platform_device supersonic_audio_jack = {
-	.name		= "audio-jack",
-	.id			= -1,
-	.dev		= {
-		.platform_data	= &supersonic_jack_data,
+static struct platform_device htc_headset_gpio = {
+	.name	= "HTC_HEADSET_GPIO",
+	.id	= -1,
+	.dev	= {
+		.platform_data	= &htc_headset_gpio_data,
 	},
 };
 
@@ -1189,6 +1211,11 @@ static void supersonic_ov9665_clk_switch(void){
 	return;
 }
 
+static int flashlight_control(int mode)
+{
+	return aat1271_flashlight_control(mode);
+}
+
 static struct camera_flash_cfg msm_camera_sensor_flash_cfg = {
 	.camera_flash		= flashlight_control,
 	.num_flash_levels	= FLASHLIGHT_NUM,
@@ -1272,9 +1299,9 @@ static struct platform_device *devices[] __initdata = {
 #ifdef CONFIG_SERIAL_MSM_HS
 	&msm_device_uart_dm1,
 #endif
-	&supersonic_h2w,
 	&htc_battery_pdev,
-	&supersonic_audio_jack,
+	&htc_headset_mgr,
+	&htc_headset_gpio,
 	&ram_console_device,
 	&supersonic_rfkill,
 	&msm_device_smd,
@@ -1283,7 +1310,6 @@ static struct platform_device *devices[] __initdata = {
 	/*&usb_mass_storage_device,*/
 	&android_pmem_mdp_device,
 	&android_pmem_adsp_device,
-	&android_pmem_camera_device,
 #ifdef CONFIG_720P_CAMERA
 	&android_pmem_venc_device,
 #endif
@@ -1303,30 +1329,6 @@ static struct platform_device *devices[] __initdata = {
 	&qsd_device_spi,
 #endif
 };
-
-static uint32_t usb_phy_3v3_table[] = {
-	PCOM_GPIO_CFG(SUPERSONIC_USB_PHY_3V3_ENABLE, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA)
-};
-
-static uint32_t usb_ID_PIN_input_table[] = {
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_USB_ID_PIN, 0, GPIO_INPUT, GPIO_NO_PULL, GPIO_4MA),
-};
-
-static uint32_t usb_ID_PIN_ouput_table[] = {
-	PCOM_GPIO_CFG(SUPERSONIC_GPIO_USB_ID_PIN, 0, GPIO_OUTPUT, GPIO_NO_PULL, GPIO_4MA),
-};
-
-void config_supersonic_usb_id_gpios(bool output)
-{
-	if (output){
-		config_gpio_table(usb_ID_PIN_ouput_table, ARRAY_SIZE(usb_ID_PIN_ouput_table));
-		gpio_set_value(SUPERSONIC_GPIO_USB_ID_PIN, 1);
-		printk(KERN_INFO "%s %d output high\n",  __func__, SUPERSONIC_GPIO_USB_ID_PIN);
-	}else{
-		config_gpio_table(usb_ID_PIN_input_table, ARRAY_SIZE(usb_ID_PIN_input_table));
-		printk(KERN_INFO "%s %d input none pull\n",  __func__, SUPERSONIC_GPIO_USB_ID_PIN);
-	}
-}
 
 /* UART1 debug port init. This is supposed to be init in bootloader */
 static uint32_t supersonic_serial_debug_table[] = {
@@ -1362,6 +1364,7 @@ static struct msm_i2c_device_platform_data msm_i2c_pdata = {
 
 static void __init msm_device_i2c_init(void)
 {
+	msm_i2c_gpio_init();
 	msm_device_i2c.dev.platform_data = &msm_i2c_pdata;
 }
 
@@ -1387,18 +1390,10 @@ static struct perflock_platform_data supersonic_perflock_data = {
 int supersonic_init_mmc(int sysrev);
 
 #ifdef CONFIG_SERIAL_MSM_HS
-extern void supersonic_config_bt_disable_active(void);
-extern void supersonic_config_bt_disable_sleep(void);
-extern int supersonic_is_bluetooth_off(void);
-
 static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
-	.wakeup_irq = MSM_GPIO_TO_INT(SUPERSONIC_GPIO_BT_HOST_WAKE),	/*Chip to Device*/
+	.rx_wakeup_irq = MSM_GPIO_TO_INT(SUPERSONIC_GPIO_BT_HOST_WAKE),	/*Chip to Device*/
 	.inject_rx_on_wakeup = 0,
 	.cpu_lock_supported = 0,
-
-	.config_as_uart = supersonic_config_bt_disable_active,
-	.config_as_gpio = supersonic_config_bt_disable_sleep,
-	.need_config = supersonic_is_bluetooth_off,
 
 	/* for bcm */
 	.bt_wakeup_pin_supported = 1,
@@ -1486,8 +1481,6 @@ static void __init supersonic_init(void)
 
 	OJ_BMA_power();
 
-	gpio_direction_output(SUPERSONIC_GPIO_PROXIMITY_EN_N, 0);
-
 	msm_acpu_clock_init(&supersonic_clock_data);
 
 	perflock_init(&supersonic_perflock_data);
@@ -1518,23 +1511,17 @@ static void __init supersonic_init(void)
 	gpio_direction_output(SUPERSONIC_GPIO_TP_EN, 0);
 
 	supersonic_audio_init();
+	supersonic_init_panel();
 #ifdef CONFIG_MICROP_COMMON
 	supersonic_microp_init();
 #endif
 	msm_device_i2c_init();
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
-	if (!opt_usb_h2w_sw) {
-		msm_register_usb_phy_init_seq(supersonic_phy_init_seq);
-		msm_register_uart_usb_switch(supersonic_uart_usb_switch);
-		msm_add_usb_id_pin_gpio(SUPERSONIC_GPIO_USB_ID_PIN);
-		msm_add_usb_id_pin_function(config_supersonic_usb_id_gpios);
-		config_supersonic_usb_id_gpios(0);
-		msm_enable_car_kit_detect(1);
-		msm_hsusb_set_product(supersonic_usb_products,
-			ARRAY_SIZE(supersonic_usb_products));
-		msm_add_usb_devices(msm_hsusb_8x50_phy_reset, NULL);
-	}
+#ifdef CONFIG_USB_ANDROID
+	if (!opt_usb_h2w_sw)
+		suc_add_usb_devices();
+#endif
 	i2c_register_board_info(0, i2c_devices, ARRAY_SIZE(i2c_devices));
 
 	ret = supersonic_init_mmc(system_rev);
@@ -1549,8 +1536,6 @@ static void __init supersonic_init(void)
 		pr_err("failed to create board_properties\n");
 
 	msm_init_pmic_vibrator();
-	config_gpio_table(usb_phy_3v3_table, ARRAY_SIZE(usb_phy_3v3_table));
-	gpio_set_value(SUPERSONIC_USB_PHY_3V3_ENABLE, 1);
 
 }
 

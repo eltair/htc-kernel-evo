@@ -120,7 +120,7 @@ static int smd_tty_open(struct tty_struct *tty, struct file *f)
 	} else if (n == 1) {
 		name = "SMD_DIAG";
 	} else if (n == 9) {
-#if defined(CONFIG_MACH_DESIREC)
+#if defined(CONFIG_MACH_DESIREC) || defined(CONFIG_ARCH_MSM7X30)
 		name = "SMD_DATA4";
 #else
 		name = "SMD_DATA9";

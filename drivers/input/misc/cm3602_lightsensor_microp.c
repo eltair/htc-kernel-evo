@@ -411,14 +411,15 @@ static ssize_t ls_enable_store(struct device *dev,
 		enable = 1;
 		li->als_calibrating = (ls_auto == 147) ? 1 : 0;
 		li->als_intr_enabled = 1;
-		ret = ls_microp_intr_enable(enable);
-		if (ret < 0)
-			pr_err("%s: ls intr enable fail\n", __func__);
 	} else {
 		enable = 0;
 		li->als_calibrating = 0;
 		li->als_intr_enabled = 0;
 	}
+
+	ret = ls_microp_intr_enable(enable);
+	if (ret < 0)
+		pr_err("%s: ls intr enable fail\n", __func__);
 
 	return count;
 }
@@ -505,7 +506,8 @@ static int lightsensor_probe(struct platform_device *pdev)
 	if (!li)
 		return -ENOMEM;
 	ls_info = li;
-	li->client = pdev->dev.driver_data;
+	li->client = dev_get_drvdata(&pdev->dev);
+
 	if (!li->client) {
 		pr_err("%s: can't get microp i2c client\n", __func__);
 		return -1;

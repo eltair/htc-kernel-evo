@@ -21,8 +21,6 @@
 #include "version.h"
 #include "sdio-fw.h"
 
-
-
 char	*fw1130_name = "sqn1130.bin";
 char	*fw1210_name = "sqn1210.bin";
 
@@ -107,7 +105,62 @@ out:
 	sqn_pr_leave();
 	return status;
 }
+ 
+// Fix big buffer allocation problem during Firmware loading
+/**
+ *	sqn_alloc_big_buffer - tries to alloc a big buffer with kmalloc
+ *	@buf: pointer to buffer
+ *	@size: required buffer size
+ *	@gfp_flags: GFP_* flags
+ *
+ *	Tries to allocate a buffer of requested size with kmalloc. If it fails,
+ *	then decrease buffer size in two times (adjusting the new size to be a
+ *	multiple of 4) and try again. Use 6 retries in case of failures, after
+ *	this give up and try to alloc 4KB buffer if requested size bigger than
+ *	4KB, otherwise allocate nothing and return 0.
+ *
+ *	@return a real size of allocated buffer or 0 if allocation failed
+ */
 
+static size_t sqn_alloc_big_buffer(u8 **buf, size_t size, gfp_t gfp_flags)
+{
+	size_t	real_size = size;
+	int	retries   = 6;
+
+	sqn_pr_enter();
+
+	/* Try to allocate buffer of requested size, if it failes try to
+	 * allocate a twice smaller buffer. Repeat this <retries> number of
+	 * times. */
+	do
+	{
+		*buf = kmalloc(real_size, gfp_flags);
+		if (!(*buf)) {
+			real_size /= 2;
+			/* adjust the size to be a multiple of 4 */
+			real_size += real_size % 4 ? 4 - real_size % 4 : 0;
+		}
+	} while (retries-- > 0 && !(*buf));
+
+	/* If all retries failed, then allocate 4KB buffer */
+	if (!(*buf)) {
+		real_size = 4 * 1024;
+		if (size >= real_size) {
+			*buf = kmalloc(real_size, gfp_flags);
+			/* If it also failed, then just return 0, indicating
+			 * that we failed to alloc buffer */
+			if (!(*buf))
+				real_size = 0;
+		} else {
+			/* We should _not_ return buffer bigger than requested */
+			real_size = 0;
+		}
+	}
+
+	sqn_pr_leave();
+
+	return real_size;
+}
 
 #define SQN_SDIO_ADA_ADDR	0x00002060
 #define SQN_SDIO_ADA_RDWR	0x00002064
@@ -116,7 +169,7 @@ out:
 static int write_data(struct sdio_func *func, u32 addr, void *data
 	, u32 size, u32 access_size)
 {
-	int rv = 0;
+	int rv = 0, retry = 0;
 	struct sqn_sdio_card *sqn_card = sdio_get_drvdata(func);
 
 	sqn_pr_enter();
@@ -126,8 +179,10 @@ static int write_data(struct sdio_func *func, u32 addr, void *data
 		&& 0 == (size % 4) && 4 == access_size)
 	{
 		/* write data using AHB */
+		u8 *buf = 0;
+		size_t buf_size = 0;
+		u32 written_size = 0;
 
-		u8 *data_cp = 0;
 #ifdef DEBUG
 		u8 *read_data  = 0;
 #endif
@@ -140,14 +195,25 @@ static int write_data(struct sdio_func *func, u32 addr, void *data
 		}
 		sqn_pr_dbg("after SQN_SDIO_ADA_ADDR\n");
 
-		data_cp = kmalloc(size, GFP_KERNEL | GFP_DMA);
-		memcpy(data_cp, data, size);
-		rv = sdio_writesb(func, SQN_SDIO_ADA_RDWR, data_cp, size);
-		if (rv) {
-			sqn_pr_dbg("can't write to SQN_SDIO_ADA_RDWR register\n");
+		written_size = 0;
+		buf_size = sqn_alloc_big_buffer(&buf, size, GFP_KERNEL | GFP_DMA);
+		if (!buf) {
+			sqn_pr_err("failed to allocate buffer of %u bytes\n", size);
 			goto out;
 		}
-		kfree(data_cp);
+
+		do {
+			memcpy(buf, data + written_size, buf_size);
+			rv = sdio_writesb(func, SQN_SDIO_ADA_RDWR, buf, buf_size);
+			if (rv) {
+				sqn_pr_dbg("can't write to SQN_SDIO_ADA_RDWR register\n");
+				goto out;
+			}
+			written_size += buf_size;
+			if (written_size + buf_size > size)
+				buf_size = size - written_size;
+		} while (written_size < size);
+		kfree(buf);
 
 		/*
 		 * Workaround when sdio_writesb doesn't work because DMA
@@ -412,7 +478,20 @@ static int sqn_handle_mac_addr_tag(struct sdio_func *func, u8 *data, u32 length)
 		sqn_pr_dbg("single mac address\n");
 		/* we have only one mac addr */
 		get_mac_addr_from_str(data, length, priv->mac_addr);
-		++(priv->mac_addr[ETH_ALEN - 1]);
+				
+		// Andrew 0720
+		// ++(priv->mac_addr[ETH_ALEN - 1])
+        // real MAC: 38:E6:D8:86:00:00 
+		// hboot will store: 38:E6:D8:85:FF:FF (minus 1)
+		// sdio need to recovery it by plusing 1: 38:E6:D8:86:00:00 (plus 1)
+	
+		if ((++(priv->mac_addr[ETH_ALEN - 1])) == 0x00)
+           if ((++(priv->mac_addr[ETH_ALEN - 2])) == 0x00)
+			   if ((++(priv->mac_addr[ETH_ALEN - 3])) == 0x00)
+                  if ((++(priv->mac_addr[ETH_ALEN - 4])) == 0x00) 
+					  if ((++(priv->mac_addr[ETH_ALEN - 5])) == 0x00) 
+						  ++(priv->mac_addr[ETH_ALEN - 6]);
+
 	}
 	else if (2 * MAC_ADDR_STRING_LEN + 1 == length) { /* we have two macs */
 		sqn_pr_dbg("two mac addresses, using second\n");

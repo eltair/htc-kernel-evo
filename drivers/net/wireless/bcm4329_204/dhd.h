@@ -407,5 +407,18 @@ enum pkt_filter_id {
 };
 int dhd_set_pktfilter(int add, int id, int offset, char *mask, char *pattern);
 
+/* power control */
+enum dhdhtc_pwr_ctrl{
+	DHDHTC_POWER_CTRL_ANDROID_NORMAL = 0,
+	DHDHTC_POWER_CTRL_BROWSER_LOAD_PAGE,
+	DHDHTC_POWER_CTRL_USER_CONFIG,
+	DHDHTC_POWER_CTRL_WIFI_PHONE,
+	DHDHTC_POWER_CTRL_MAX_NUM,
+};
+extern int dhdhtc_update_wifi_power_mode(int is_screen_off);
+extern int dhdhtc_set_power_control(int power_mode, unsigned int reason);
+extern unsigned int dhdhtc_get_cur_pwr_ctrl(void);
+extern int dhdhtc_update_dtim_listen_interval(int is_screen_off);
+
 
 #endif /* _dhd_h_ */

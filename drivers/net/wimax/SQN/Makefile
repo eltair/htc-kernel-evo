@@ -109,7 +109,6 @@ EXTRA_CFLAGS	+= -D$(SQN_TARGET) -Wno-unused-function -Wno-unused-label	\
 ### For ANDROID kernel we need the following lines
 ### For other kernels we should comment them
 
-# Remove it temporary, Andrew 0223
 EXTRA_CFLAGS	+= -DANDROID_KERNEL
 
 ### end of HTC kernel specific options

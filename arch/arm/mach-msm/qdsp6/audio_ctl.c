@@ -25,12 +25,6 @@
 
 #define BUFSZ (0)
 
-#if 1
-#define AUDIO_INFO(x...) pr_info("Audio: "x)
-#else
-#define AUDIO_INFO(x...) do{}while(0)
-#endif
-
 static DEFINE_MUTEX(voice_lock);
 static DEFINE_MUTEX(fm_lock);
 static int voice_started;
@@ -136,7 +130,6 @@ static int q6_ioctl(struct inode *inode, struct file *file,
 	switch (cmd) {
 	case AUDIO_SWITCH_DEVICE:
 		rc = copy_from_user(&id, (void *)arg, sizeof(id));
-		AUDIO_INFO("SWITCH DEVICE %d, acdb %d\n", id[0], id[1]);
 		if (!rc)
 			rc = q6audio_do_routing(id[0], id[1]);
 		break;
@@ -163,19 +156,15 @@ static int q6_ioctl(struct inode *inode, struct file *file,
 			rc = -EFAULT;
 			break;
 		}
-		AUDIO_INFO("voice: start\n");
 		rc = q6_voice_start(id[0], id[1]);
 		break;
 	case AUDIO_STOP_VOICE:
-		AUDIO_INFO("voice: stop\n");
 		rc = q6_voice_stop();
 		break;
 	case AUDIO_START_FM:
-		AUDIO_INFO("FM: start\n");
 		rc = q6_fm_start();
 		break;
 	case AUDIO_STOP_FM:
-		AUDIO_INFO("FM: stop\n");
 		rc = q6_fm_stop();
 		break;
 	case AUDIO_REINIT_ACDB:
@@ -189,25 +178,9 @@ static int q6_ioctl(struct inode *inode, struct file *file,
 			rc = -EFAULT;
 			break;
 		}
-		AUDIO_INFO("audio_ctl: enable aux loopback %d\n", enable);
 		rc = enable_aux_loopback(enable);
 		break;
 	}
-	case AUDIO_SET_AUXPGA_GAIN: {
-		int level;
-		if (copy_from_user(&level, (void*) arg, sizeof(level))) {
-			rc = -EFAULT;
-			break;
-		}
-		AUDIO_INFO("audio_ctl: set aux gain %d\n", level);
-		rc = set_aux_gain(level);
-		break;
-	}
-	case AUDIO_SET_RX_MUTE:
-		rc = copy_from_user(&n, (void *)arg, sizeof(n));
-		if (!rc)
-			rc = q6audio_set_rx_mute(n);
-		break;
 	default:
 		rc = -EINVAL;
 	}

@@ -37,6 +37,7 @@
 #include "sdio-sqn.h"
 
 #define IGNORE_CARRIER_STATE 1
+extern int mmc_wimax_get_hostwakeup_gpio(void);
 
 enum sqn_thsp_service {
 #define	THSP_LSP_SERVICE_BASE		0x10010000
@@ -771,12 +772,23 @@ out:
 }
 
 #ifdef ANDROID_KERNEL
+
+extern u8 sqn_is_gpio_irq_enabled;
+
 static void sqn_handle_android_early_suspend(struct early_suspend *h)
 {
 	sqn_pr_enter();
-    sqn_pr_info("%s: enter\n", __func__);
+	sqn_pr_info("%s: enter\n", __func__);
 
-    sqn_pr_info("%s: leave\n", __func__);
+	if (!sqn_is_gpio_irq_enabled) {
+		sqn_pr_info("enable GPIO%d interrupt\n", mmc_wimax_get_hostwakeup_gpio());
+		enable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
+		enable_irq_wake(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
+
+		sqn_is_gpio_irq_enabled = 1;
+	}
+
+	sqn_pr_info("%s: leave\n", __func__);
 	sqn_pr_leave();
 }
 
@@ -784,9 +796,16 @@ static void sqn_handle_android_early_suspend(struct early_suspend *h)
 static void sqn_handle_android_late_resume(struct early_suspend *h)
 {
 	sqn_pr_enter();
-    sqn_pr_info("%s: enter\n", __func__);
+	sqn_pr_info("%s: enter\n", __func__);
 
-    sqn_pr_info("%s: leave\n", __func__);
+	if (sqn_is_gpio_irq_enabled) {
+		sqn_pr_info("disable GPIO%d interrupt\n", (mmc_wimax_get_hostwakeup_gpio()));
+		disable_irq_wake(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
+		disable_irq(MSM_GPIO_TO_INT(mmc_wimax_get_hostwakeup_gpio()));
+		sqn_is_gpio_irq_enabled = 0;
+    }
+
+	sqn_pr_info("%s: leave\n", __func__);
 	sqn_pr_leave();
 }
 

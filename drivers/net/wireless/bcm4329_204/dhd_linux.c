@@ -3,13 +3,13 @@
  * Basically selected code segments from usb-cdc.c and usb-rndis.c
  *
  * Copyright (C) 1999-2010, Broadcom Corporation
- * 
+ *
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- * 
+ *
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -17,7 +17,7 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- * 
+ *
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
@@ -301,7 +301,7 @@ char nvram_path[MOD_PARAM_PATHLEN];
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && 1
 struct semaphore dhd_registration_sem;
-#endif 
+#endif
 /* load firmware and/or nvram values from the filesystem */
 module_param_string(firmware_path, firmware_path, MOD_PARAM_PATHLEN, 0);
 module_param_string(nvram_path, nvram_path, MOD_PARAM_PATHLEN, 0);
@@ -692,6 +692,10 @@ _dhd_set_multicast_list(dhd_info_t *dhd, int ifidx)
 
 	MFREE(dhd->pub.osh, buf, buflen);
 
+	/* Mark below code due to current firmware doesn't support it.
+	 * The error message may mislead other engineers
+	 */
+#if 0
 	/* Finally, pick up the PROMISC flag as well, like the NIC driver does */
 
 	allmulti = (dev->flags & IFF_PROMISC) ? TRUE : FALSE;
@@ -708,6 +712,8 @@ _dhd_set_multicast_list(dhd_info_t *dhd, int ifidx)
 		DHD_ERROR(("%s: set promisc %d failed\n",
 		           dhd_ifname(&dhd->pub, ifidx), ltoh32(allmulti)));
 	}
+#endif
+
 }
 
 static int
@@ -736,6 +742,10 @@ _dhd_set_mac_address(dhd_info_t *dhd, int ifidx, struct ether_addr *addr)
 
 	return ret;
 }
+
+#ifdef CONFIG_BCM4329_SOFTAP
+extern struct net_device *ap_net_dev;
+#endif
 
 static void
 dhd_op_if(dhd_if_t *ifp)
@@ -773,6 +783,15 @@ dhd_op_if(dhd_if_t *ifp)
 					__FUNCTION__, err));
 				ret = -EOPNOTSUPP;
 			} else {
+#ifdef CONFIG_BCM4329_SOFTAP
+				 /* semaphore that the soft AP CODE waits on */
+				extern struct semaphore  ap_eth_sema;
+
+				/* save ptr to wl0.1 netdev for use in wl_iw.c  */
+				ap_net_dev = ifp->net;
+				 /* signal to the SOFTAP 'sleeper' thread, wl0.1 is ready */
+				up(&ap_eth_sema);
+#endif
 				DHD_TRACE(("\n ==== pid:%x, net_device for if:%s created ===\n\n",
 					current->pid, ifp->net->name));
 				ifp->state = 0;
@@ -799,6 +818,10 @@ dhd_op_if(dhd_if_t *ifp)
 		}
 		dhd->iflist[ifp->idx] = NULL;
 		MFREE(dhd->pub.osh, ifp, sizeof(*ifp));
+#ifdef CONFIG_BCM4329_SOFTAP
+		if (ifp->net == ap_net_dev)
+			ap_net_dev = NULL;     /* NULL SOFTAP global as well */
+#endif /*  CONFIG_BCM4329_SOFTAP */
 	}
 }
 
@@ -1685,7 +1708,7 @@ dhd_osl_detach(osl_t *osh)
 	osl_detach(osh);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && 1
 	up(&dhd_registration_sem);
-#endif 
+#endif
 }
 
 int
@@ -2083,7 +2106,7 @@ dhd_net_attach(dhd_pub_t *dhdp, int ifidx)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
 	up(&dhd_registration_sem);
-#endif 
+#endif
 	return 0;
 
 fail:
@@ -2244,7 +2267,7 @@ dhd_module_init(void)
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27))
 	sema_init(&dhd_registration_sem, 0);
-#endif 
+#endif
 
 	error = dhd_bus_register();
 

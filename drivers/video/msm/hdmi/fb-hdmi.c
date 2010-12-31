@@ -33,8 +33,8 @@
 #include <linux/debugfs.h>
 #include <linux/dma-mapping.h>
 #include <linux/htc_hdmi.h>
-#ifdef CONFIG_HTC_HEADSET
-#include <mach/htc_headset_common.h>
+#ifdef CONFIG_HTC_HEADSET_MGR
+#include <mach/htc_headset_mgr.h>
 #endif
 
 #include "include/fb-hdmi.h"
@@ -243,7 +243,7 @@ static int hdmifb_pause(struct fb_info *fb, unsigned int mode)
 			hdmi_pre_change(info);
 			ret = panel->blank(panel);
 			clear_bit(hdmi_enabled, &hdmi_fb->state);
-#ifdef CONFIG_HTC_HEADSET
+#ifdef CONFIG_HTC_HEADSET_MGR
 			switch_send_event(BIT_HDMI_AUDIO, 0);
 #endif
 		}
@@ -260,7 +260,7 @@ static int hdmifb_pause(struct fb_info *fb, unsigned int mode)
 			hdmi_post_change(info, var);
 */
 			set_bit(hdmi_enabled, &hdmi_fb->state);
-#ifdef CONFIG_HTC_HEADSET
+#ifdef CONFIG_HTC_HEADSET_MGR
 			switch_send_event(BIT_HDMI_AUDIO, 1);
 #endif
 		}

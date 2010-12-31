@@ -104,8 +104,6 @@ struct atmel_i2c_platform_data {
 	int8_t cable_config_T28[6];
 	uint16_t filter_level[4];
 	uint8_t GCAF_level[5];
-	int display_width;	/* display width in pixel */
-	int display_height;	/* display height in pixel */
 };
 
 struct atmel_config_data {

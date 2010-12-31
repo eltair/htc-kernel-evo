@@ -17,7 +17,6 @@
 #include <linux/gpio.h>
 #include <linux/err.h>
 #include <linux/delay.h>
-#include <mach/pmic.h>
 #include <mach/msm_qdsp6_audio.h>
 #include <mach/htc_acoustic_qsd.h>
 #include <mach/tpa6130.h>
@@ -26,6 +25,7 @@
 
 #include "board-supersonic.h"
 #include "proc_comm.h"
+#include "pmic.h"
 
 #if 1
 #define D(fmt, args...) printk(KERN_INFO "Audio: "fmt, ##args)

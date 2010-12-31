@@ -61,7 +61,6 @@ struct msm_hsusb_platform_data {
 	__u16 product_id;
 
 	__u16 version;
-	char *serial_number;
 	char *product_name;
 	char *manufacturer_name;
 
@@ -74,9 +73,12 @@ struct msm_hsusb_platform_data {
 	*/
 	int num_products;
 	struct msm_hsusb_product *products;
+#endif
+	char *serial_number;
 	int usb_id_pin_gpio;
 	bool enable_car_kit_detect;
-#endif
+	__u8 accessory_detect;
 };
+
 int usb_get_connect_type(void);
 #endif

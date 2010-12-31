@@ -56,7 +56,7 @@ DECLARE_WAIT_QUEUE_HEAD(to_sqntool_wait);
 struct net_device *this_device = NULL;
 
 struct packet_type rx_packet_type = { 0 };
-extern int supersonic_wimax_uart_switch(int uart);
+extern int mmc_wimax_uart_switch(int uart);
 
 uint8_t is_thp_packet(uint8_t  *dest_addr)
 {
@@ -596,9 +596,9 @@ static int thp_ioctl(struct inode* dev, struct file* handle, unsigned int cmd, u
         case IOCTL_SWITCH_UART:
 			printk(KERN_WARNING "IOCTL_SWITCH_UART arg=%d\n",(int)arg);
 			if(arg == 1) 
-			    supersonic_wimax_uart_switch(2); // Wimax
+			    mmc_wimax_uart_switch(2); // Wimax
 			else 
-				supersonic_wimax_uart_switch(0); // USB
+				mmc_wimax_uart_switch(0); // USB
 			break;  
         
 		default:
@@ -692,10 +692,10 @@ int thp_wimax_uart_switch(int on)
     printk("%s on%d\n", __func__, on);
 
 	if (on) {
-        supersonic_wimax_uart_switch(2); // Wimax
+        mmc_wimax_uart_switch(2); // Wimax
 	}
 	else {
-        supersonic_wimax_uart_switch(0); // USB
+        mmc_wimax_uart_switch(0); // USB
 	}
 
 	return 0;

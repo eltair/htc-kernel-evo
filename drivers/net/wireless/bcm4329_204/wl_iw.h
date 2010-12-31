@@ -61,7 +61,11 @@
 #define AP_LPB_CMD              (SIOCIWFIRSTPRIV+23)
 #define WL_AP_STOP              (SIOCIWFIRSTPRIV+25)
 #define WL_FW_RELOAD            (SIOCIWFIRSTPRIV+27)
+#if 0
 #define WL_AP_SPARE2            (SIOCIWFIRSTPRIV+29)
+#else
+#define WL_SET_AP_TXPWR      (SIOCIWFIRSTPRIV+29)
+#endif
 #define WL_AP_SPARE3            (SIOCIWFIRSTPRIV+31)
 #define G_SCAN_RESULTS		(8*1024)
 #define WE_ADD_EVENT_FIX	0x80
@@ -128,6 +132,35 @@ typedef enum broadcast_first_scan {
 	BROADCAST_SCAN_FIRST_RESULT_READY,
 	BROADCAST_SCAN_FIRST_RESULT_CONSUMED
 } broadcast_first_scan_t;
+#ifdef CONFIG_BCM4329_SOFTAP
+#define SSID_LEN	33
+#define SEC_LEN		16
+#define KEY_LEN		65
+#define PROFILE_OFFSET	32
+struct ap_profile {
+	uint8	ssid[SSID_LEN];
+	uint8	sec[SEC_LEN];
+	uint8	key[KEY_LEN];
+	uint32	channel;
+	uint32	preamble;
+	uint32	max_scb;
+};
+
+
+#define MACLIST_MODE_DISABLED	0
+#define MACLIST_MODE_ENABLED	1
+#define MACLIST_MODE_ALLOW	2
+struct mflist {
+	uint count;
+	struct ether_addr ea[16];
+};
+
+struct mac_list_set {
+	uint32	mode;
+	struct mflist white_list;
+	struct mflist black_list;
+};
+#endif
 
 #if WIRELESS_EXT > 12
 #include <net/iw_handler.h>

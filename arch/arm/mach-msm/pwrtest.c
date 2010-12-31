@@ -48,7 +48,7 @@ void gpio_set_diag_gpio_table(unsigned long * dwMFG_gpio_table)
 	for (i = 0; i < 132; i++)
 #elif defined(CONFIG_ARCH_QSD8X50)
 	for (i = 0; i <= 164; i++)
-#elif defined(CONFIG_ARCH_MSM7230)
+#elif defined(CONFIG_ARCH_MSM7X30)
 	for (i = 0; i <= 181; i++)
 #endif
 	{

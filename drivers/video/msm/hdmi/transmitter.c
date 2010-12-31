@@ -28,8 +28,8 @@
 #include "include/fb-hdmi.h"
 #include "include/sil902x.h"
 
-#ifdef CONFIG_HTC_HEADSET
-#include <mach/htc_headset_common.h>
+#ifdef CONFIG_HTC_HEADSET_MGR
+#include <mach/htc_headset_mgr.h>
 #endif
 
 #if 1
@@ -463,7 +463,7 @@ static irqreturn_t hdmi_irq_handler(int irq, void *data)
 	struct hdmi_info *hdmi = (struct hdmi_info *) data;
         HDMI_DBG("%s\n", __func__);
 
-	disable_irq(hdmi->client->irq);
+	disable_irq_nosync(hdmi->client->irq);
 	hdmi->isr_enabled = false;
 	hdmi->first = true;
 	if (!hdmi->cable_connected) {
@@ -561,7 +561,9 @@ static int hdmi_panel_init(struct msm_lcdc_panel_ops *ops)
 		mod_timer(&hd->timer, jiffies + INTERVAL_HDCP_POLLING);
 		conn = hdmi_read(client, HDMI_INT_STAT) & HOT_PLUG_STATE;
 		tpi_init(hd);
+#ifdef CONFIG_HTC_HEADSET_MGR
 		switch_send_event(BIT_HDMI_AUDIO, conn);
+#endif
 		mutex_unlock(&hd->lock);
 	}
 	hd->suspending = false;
@@ -956,7 +958,8 @@ static int __init hdmi_probe(struct i2c_client *client,
 
 	hd->hdmi_dev.dev.parent = &client->dev;
 	hd->hdmi_dev.dev.class = hdmi_class;
-	snprintf(hd->hdmi_dev.dev.bus_id, BUS_ID_SIZE, "hdmi%d", 0);
+	//snprintf(hd->hdmi_dev.dev.bus_id, BUS_ID_SIZE, "hdmi%d", 0);
+	dev_set_name(&hd->hdmi_dev.dev, "hdmi%d", 0);
 	ret = device_register(&hd->hdmi_dev.dev);
 	if (ret)
 		dev_err(&client->dev, "device register fail\n");
