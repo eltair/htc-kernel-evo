@@ -54,9 +54,9 @@ params_phys-y           := 0x04C00100
 initrd_phys-y           := 0x05C00000
 else
 ifeq ($(CONFIG_MACH_SPEEDY),y)
-  zreladdr-y            := 0x04008000
-params_phys-y           := 0x04000100
-initrd_phys-y           := 0x05000000
+  zreladdr-y            := 0x03C08000
+params_phys-y           := 0x03C00100
+initrd_phys-y           := 0x04C00000
 else
   zreladdr-y            := 0x04A08000
 params_phys-y           := 0x04A00100

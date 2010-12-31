@@ -99,6 +99,16 @@ static inline struct f_acm *port_to_acm(struct gserial *p)
 #define GS_NOTIFY_MAXPACKET		10	/* notification + 2 bytes */
 
 /* interface and class descriptors: */
+static struct usb_interface_assoc_descriptor acm_iad = {
+	.bLength =		sizeof acm_iad,
+	.bDescriptorType =	USB_DT_INTERFACE_ASSOCIATION,
+	.bFirstInterface = 0,
+	.bInterfaceCount = 2,
+	.bFunctionClass = USB_CLASS_COMM,
+	.bFunctionSubClass = USB_CDC_SUBCLASS_ACM,
+	.bFunctionProtocol = 0,
+	.iFunction = 0,
+};
 
 static struct usb_interface_descriptor acm_control_interface_desc __initdata = {
 	.bLength =		USB_DT_INTERFACE_SIZE,
@@ -179,6 +189,7 @@ static struct usb_endpoint_descriptor acm_fs_out_desc __initdata = {
 };
 
 static struct usb_descriptor_header *acm_fs_function[] __initdata = {
+	(struct usb_descriptor_header *) &acm_iad,
 	(struct usb_descriptor_header *) &acm_control_interface_desc,
 	(struct usb_descriptor_header *) &acm_header_desc,
 	(struct usb_descriptor_header *) &acm_call_mgmt_descriptor,
@@ -217,6 +228,7 @@ static struct usb_endpoint_descriptor acm_hs_out_desc __initdata = {
 };
 
 static struct usb_descriptor_header *acm_hs_function[] __initdata = {
+	(struct usb_descriptor_header *) &acm_iad,
 	(struct usb_descriptor_header *) &acm_control_interface_desc,
 	(struct usb_descriptor_header *) &acm_header_desc,
 	(struct usb_descriptor_header *) &acm_call_mgmt_descriptor,
@@ -376,7 +388,25 @@ static int acm_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct f_acm		*acm = func_to_acm(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
+	struct usb_descriptor_header **desc;
+	struct usb_interface_descriptor *data_intf, *control_intf;
 
+	printk(KERN_INFO "%s: intf %d, alt %d\n", __func__, intf, alt);
+	if (cdev->gadget->speed == USB_SPEED_HIGH)
+		desc = f->hs_descriptors;
+	else
+		desc = f->descriptors;
+	control_intf = (struct usb_interface_descriptor *)*(desc+1);
+	data_intf = (struct usb_interface_descriptor *)*(desc+7);
+
+	acm_union_desc.bMasterInterface0 = control_intf->bInterfaceNumber;
+	acm->ctrl_id = control_intf->bInterfaceNumber;
+	acm_control_interface_desc.bInterfaceNumber = control_intf->bInterfaceNumber;
+
+	acm_union_desc.bSlaveInterface0 = data_intf->bInterfaceNumber;
+	acm->data_id = data_intf->bInterfaceNumber;
+	acm_call_mgmt_descriptor.bDataInterface = data_intf->bInterfaceNumber;
+	acm_data_interface_desc.bInterfaceNumber = data_intf->bInterfaceNumber;
 	/* we know alt == 0, so this is an activation or a reset */
 
 	if (intf == acm->ctrl_id) {
@@ -756,6 +786,7 @@ int __init acm_bind_config(struct usb_configuration *c, u8 port_num)
 	acm->port.func.set_alt = acm_set_alt;
 	acm->port.func.setup = acm_setup;
 	acm->port.func.disable = acm_disable;
+	acm->port.func.hidden = 1;
 
 	status = usb_add_function(c, &acm->port.func);
 	if (status)
@@ -767,9 +798,9 @@ int __init acm_bind_config(struct usb_configuration *c, u8 port_num)
 
 int acm_function_bind_config(struct usb_configuration *c)
 {
-	int ret = acm_bind_config(c, 0);
+	int ret = acm_bind_config(c, 1);
 	if (ret == 0)
-		gserial_setup(c->cdev->gadget, 1);
+		gserial_setup(c->cdev->gadget, 3);
 	return ret;
 }
 

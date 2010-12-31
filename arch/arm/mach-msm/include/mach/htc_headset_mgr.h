@@ -59,8 +59,6 @@
 #define HS_JIFFIES_REMOVE		msecs_to_jiffies(HS_DELAY_REMOVE)
 #define HS_JIFFIES_BUTTON		msecs_to_jiffies(HS_DELAY_BUTTON)
 
-#define HS_WAKE_LOCK_TIMEOUT		2 * HZ
-
 /* Definitions for Headset RPC Server */
 #define HS_RPC_SERVER_PROG		0x30100004
 #define HS_RPC_SERVER_VERS		0x00000000
@@ -139,8 +137,6 @@ struct hs_notifier_func {
 
 struct htc_headset_mgr_platform_data {
 	unsigned int driver_flag;
-	int headset_devices_num;
-	struct platform_device **headset_devices;
 
 	int cable_in1;
 	int cable_in2;
@@ -301,10 +297,8 @@ typedef enum {
 	H2W_50KHz	= 10,
 } H2W_SPEED;
 
-struct htc_headset_mgr_info {
-	struct htc_headset_mgr_platform_data pdata;
-	int driver_init_seq;
-	struct wake_lock hs_wake_lock;
+struct h2w_info {
+	unsigned int driver_flag;
 
 	unsigned long hpin_jiffies;
 
@@ -394,7 +388,6 @@ int htc_35mm_remote_notify_microp_ready(void);
 int htc_35mm_remote_notify_button_status(int key_level);
 int htc_35mm_remote_notify_irq_enable(int enable);
 
-void hs_notify_driver_ready(char *name);
 void hs_notify_hpin_irq(void);
 int hs_hpin_stable(void);
 

@@ -198,7 +198,6 @@ static int __init supersonic_wifi_init(void)
 	printk("%s: start\n", __func__);
 	supersonic_wifi_update_nvs("sd_oobonly=1\n");
 	supersonic_wifi_update_nvs("btc_params80=0\n");
-	supersonic_wifi_update_nvs("btc_params6=30\n");
 
 	strip_nvs_param("pa0maxpwr");
 	supersonic_wifi_update_nvs("pa0maxpwr=78\n");

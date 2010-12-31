@@ -4,33 +4,27 @@ obj-y += devices.o pwrtest.o
 obj-y += proc_comm.o
 obj-y += vreg.o
 obj-y += pmic.o
+obj-y += remote_spinlock.o
 obj-$(CONFIG_ARCH_MSM_ARM11) += acpuclock-arm11.o idle.o
 obj-$(CONFIG_ARCH_QSD8X50) += arch-init-scorpion.o acpuclock-scorpion.o
 obj-$(CONFIG_ARCH_MSM7X30) += acpuclock-7x30.o internal_power_rail.o
-obj-$(CONFIG_ACPUCLOCK_DEBUG) += acpuclock_debug.o
 obj-$(CONFIG_ARCH_MSM7X30) += clock-7x30.o arch-init-7x30.o socinfo.o
-obj-$(CONFIG_ARCH_MSM7X30) += spm.o
-obj-$(CONFIG_ARCH_MSM_SCORPION) += idle-v7.o msm_fault_handlers.o
+obj-$(CONFIG_ARCH_MSM7X30) += rpc_pmapp.o smd_rpcrouter_clients.o spm.o
+obj-$(CONFIG_ARCH_MSM7X30) += rpc_hsusb.o
+obj-$(CONFIG_ARCH_MSM_SCORPION) += idle-v7.o
 obj-y += clock.o
 obj-y += gpio.o generic_gpio.o
 obj-y += nand_partitions.o
 obj-y += drv_callback.o
-obj-y += radio_feedback.o
 obj-$(CONFIG_ARCH_QSD8X50) += pmic.o htc_wifi_nvs.o htc_bluetooth.o
 
 obj-$(CONFIG_MSM_FIQ_SUPPORT) += fiq_glue.o
 obj-$(CONFIG_MACH_TROUT) += board-trout-rfkill.o
-
-obj-$(CONFIG_MSM_SMD) += htc_port_list.o
-obj-$(CONFIG_ARCH_MSM7X30) += rpc_hsusb.o
-
-obj-y += remote_spinlock.o
-ifndef CONFIG_QCT_LTE
-obj-$(CONFIG_ARCH_MSM7X30) += rpc_pmapp.o smd_rpcrouter_clients.o
 obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o
 obj-$(CONFIG_MSM_SMD) += smd_tty.o smd_qmi.o
 obj-$(CONFIG_MSM_SMD) += smem_log.o
 obj-$(CONFIG_MSM_SMD) += last_radio_log.o
+obj-$(CONFIG_MSM_SMD) += htc_port_list.o
 ifndef CONFIG_ARCH_MSM7X30
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter.o
 else
@@ -45,10 +39,6 @@ endif
 obj-$(CONFIG_MSM_ONCRPCROUTER) += smd_rpcrouter_xdr.o
 obj-$(CONFIG_MSM_RPCSERVERS) += rpc_server_dog_keepalive.o
 obj-$(CONFIG_MSM_RPCSERVERS) += rpc_server_time_remote.o
-else
-obj-$(CONFIG_QCT_LTE) += lte/
-endif
-
 obj-$(CONFIG_MSM_DALRPC) += dal.o
 obj-$(CONFIG_MSM_DALRPC_TEST) += dal_remotetest.o
 obj-$(CONFIG_ARCH_MSM7X30) += dal_axi.o
@@ -62,7 +52,7 @@ obj-$(CONFIG_CPU_FREQ) += cpufreq.o
 
 obj-$(CONFIG_HTC_ACOUSTIC) += htc_acoustic.o
 obj-$(CONFIG_HTC_ACOUSTIC_QSD) += htc_acoustic_qsd.o
-obj-$(CONFIG_MSM7KV2_AUDIO) += htc_acoustic_7x30.o htc_acdb_7x30.o
+obj-$(CONFIG_MSM7KV2_AUDIO) += htc_acoustic_7x30.o
 obj-$(CONFIG_SENSORS_AKM8976) += htc_akm_cal.o
 
 obj-$(CONFIG_MACH_HALIBUT) += board-halibut.o board-halibut-panel.o
@@ -85,7 +75,7 @@ obj-$(CONFIG_MACH_MAHIMAHI) += board-mahimahi-microp.o
 obj-$(CONFIG_MACH_MAHIMAHI) += htc_acoustic_qsd.o
 obj-$(CONFIG_MACH_MAHIMAHI) += board-mahimahi-flashlight.o
 
-obj-$(CONFIG_MACH_INCREDIBLEC) += board-incrediblec.o panel-samsungwvga-tl2796a.o panel-sonywvga-s6d16a0x21.o board-incrediblec-tv.o
+obj-$(CONFIG_MACH_INCREDIBLEC) += board-incrediblec.o panel-samsungwvga-tl2796a.o board-incrediblec-tv.o
 obj-$(CONFIG_MACH_INCREDIBLEC) += board-incrediblec-keypad.o board-incrediblec-mmc.o
 obj-$(CONFIG_MACH_INCREDIBLEC) += board-incrediblec-rfkill.o board-incrediblec-audio.o
 obj-$(CONFIG_MACH_INCREDIBLEC) += board-incrediblec-wifi.o htc_awb_cal.o
@@ -133,6 +123,14 @@ obj-$(CONFIG_MACH_SPEEDY)+= board-speedy-mmc.o board-speedy-wifi.o
 obj-$(CONFIG_MACH_SPEEDY)+= board-speedy-rfkill.o
 obj-$(CONFIG_MACH_SPEEDY)+= board-speedy-panel.o htc_bluetooth.o
 
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc.o
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc-keypad.o
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc-microp.o
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc-audio.o
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc-mmc.o
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc-rfkill.o
+obj-$(CONFIG_MACH_BLITZC)+= board-blitzc-panel.o
+
 obj-$(CONFIG_MACH_MECHA)+= board-mecha.o
 obj-$(CONFIG_MACH_MECHA)+= board-mecha-keypad.o
 obj-$(CONFIG_MACH_MECHA)+= board-mecha-microp.o
@@ -156,12 +154,6 @@ obj-$(CONFIG_MACH_SPADE)+= board-spade-microp.o
 obj-$(CONFIG_MACH_SPADE)+= board-spade-audio.o
 obj-$(CONFIG_MACH_SPADE)+= board-spade-mmc.o board-spade-wifi.o htc_awb_cal.o
 obj-$(CONFIG_MACH_SPADE)+= board-spade-rfkill.o htc_bluetooth.o board-spade-panel.o
-
-obj-$(CONFIG_MACH_DYNASTY)+= board-dynasty.o
-obj-$(CONFIG_MACH_DYNASTY)+= board-dynasty-keypad.o
-obj-$(CONFIG_MACH_DYNASTY)+= board-dynasty-microp.o
-obj-$(CONFIG_MACH_DYNASTY)+= board-dynasty-mmc.o board-dynasty-wifi.o htc_awb_cal.o
-obj-$(CONFIG_MACH_DYNASTY)+= board-dynasty-rfkill.o htc_bluetooth.o
 
 # MSM7200A boards
 obj-$(CONFIG_MACH_HERO) += board-hero.o board-hero-panel.o board-hero-keypad.o
@@ -196,7 +188,7 @@ obj-$(CONFIG_MACH_HEROC) += board-heroc-mmc.o board-heroc-wifi.o htc_wifi_nvs.o
 obj-$(CONFIG_ARCH_MSM7X00A) += msm_vibrator.o devices_htc.o
 obj-$(CONFIG_ARCH_MSM7225) += msm_vibrator.o devices_htc.o htc_wifi_nvs.o htc_awb_cal.o htc_bluetooth.o
 obj-$(CONFIG_ARCH_MSM7227) += msm_vibrator.o devices_htc.o htc_wifi_nvs.o htc_awb_cal.o
-obj-$(CONFIG_ARCH_QSD8X50) += msm_vibrator.o devices_htc.o
+obj-$(CONFIG_ARCH_QSD8X50) += msm_vibrator.o
 obj-$(CONFIG_ARCH_MSM7X30) += msm_vibrator.o devices_htc.o
 obj-$(CONFIG_ARCH_MSM_FLASHLIGHT) += msm_flashlight.o
 
@@ -206,10 +198,7 @@ obj-$(CONFIG_HTC_BATTCHG) += htc_battery.o
 
 obj-$(CONFIG_HTC_PWRSINK) += htc_pwrsink.o
 obj-$(CONFIG_MSM_RMT_STORAGE_SERVER) += rmt_storage_server.o
-ifeq ($(CONFIG_MSM_SSBI),y)
-else
 obj-$(CONFIG_PMIC8058) += pmic8058-gpio.o pmic8058-mpp.o
-endif
 obj-$(CONFIG_MSM_NPA) += npa.o npa_resources.o msm_pm_qos.o msm_reqs.o
 obj-$(CONFIG_MSM_NPA_REMOTE) += npa_remote.o
 obj-$(CONFIG_MSM_NPA_REMOTE_ONCRPC) += npa_remote_rpc_client.o

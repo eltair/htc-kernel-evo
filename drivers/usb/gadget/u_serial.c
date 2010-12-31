@@ -77,7 +77,7 @@
  * next layer of buffering.  For TX that's a circular buffer; for RX
  * consider it a NOP.  A third layer is provided by the TTY code.
  */
-#define QUEUE_SIZE		32
+#define QUEUE_SIZE		16
 #define WRITE_BUF_SIZE		8192		/* TX only */
 
 static struct workqueue_struct *gs_tty_wq;
@@ -1174,6 +1174,9 @@ int gserial_setup(struct usb_gadget *g, unsigned count)
 	if (count == 0 || count > N_PORTS)
 		return -EINVAL;
 
+	if (gs_tty_driver)
+		return -EBUSY;
+
 	gs_tty_wq = create_singlethread_workqueue("gs_tty");
 	if (gs_tty_wq == 0)
 		return -ENOMEM;
@@ -1418,9 +1421,9 @@ void gserial_disconnect(struct gserial *gser)
 
 	/* REVISIT as above: how best to track this? */
 	port->port_line_coding = gser->port_line_coding;
+#if 0
 	port->port_usb = NULL;
 	gser->ioport = NULL;
-#if 0
 	if (port->open_count > 0 || port->openclose) {
 		wake_up_interruptible(&port->drain_wait);
 		if (port->port_tty)

@@ -28,7 +28,6 @@ struct mmc_platform_data {
 	int use_ext_sdiodrv;
 	unsigned char *ext_sdiodrv_name;
 #endif
-	unsigned long mmc_bus_width;
 };
 
 #endif

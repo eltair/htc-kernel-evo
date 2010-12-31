@@ -3229,15 +3229,6 @@ config MSM_RMNET
 	help
 	  Virtual ethernet interface for MSM RMNET transport.
 
-if QCT_LTE
-config MSM_RMNET_SDIO
-	bool "RMNET SDIO Driver"
-	depends on MSM_SDIO_AL
-	default y
-	help
-	  Implements RMNET over SDIO interface.
-endif
-
 config MSM_RMNET_DEBUG
 	bool "MSM RMNET debug interface"
 	depends on MSM_RMNET
@@ -3285,7 +3276,7 @@ config VMXNET3
 config KINETO_GAN 
         tristate "Kineto GAN virtual network interface" 
         depends on ARM 
-        default n
+        default n 
         help 
           Virtual ethernet interface for Kineto GAN transport.
 

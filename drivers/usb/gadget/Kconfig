@@ -882,13 +882,4 @@ config USB_ACCESSORY_DETECT_BY_ADC
 	depends on USB_ANDROID && USB_ACCESSORY_DETECT
 	default n
 
-config USB_BYPASS_VBUS_NOTIFY
-        boolean "USB BYPASS VBUS NOTIFY"
-        depends on USB_ANDROID
-        default n
-
-config USB_HUB
-	boolean "USB HUB driver"
-	depends on USB_ANDROID
-	default n
 endif # USB_GADGET

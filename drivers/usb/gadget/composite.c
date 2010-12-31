@@ -26,6 +26,7 @@
 #include <linux/device.h>
 
 #include <linux/usb/composite.h>
+#include <linux/usb/cdc.h>
 
 
 /*
@@ -276,6 +277,7 @@ static struct usb_function *get_function_by_intf(struct usb_composite_dev *cdev,
 	struct usb_configuration *config = cdev->config;
 	enum usb_device_speed	speed = cdev->gadget->speed;
 	struct usb_function *f;
+	struct usb_descriptor_header **descriptors;
 	struct usb_descriptor_header *descriptor;
 	struct usb_interface_descriptor *intf_desc;
 	int i;
@@ -285,6 +287,7 @@ static struct usb_function *get_function_by_intf(struct usb_composite_dev *cdev,
 			return NULL;
 		if (f->hidden)
 			continue;
+#if 0
 
 		if (speed == USB_SPEED_HIGH)
 			descriptor = *(f->hs_descriptors);
@@ -294,6 +297,19 @@ static struct usb_function *get_function_by_intf(struct usb_composite_dev *cdev,
 		if (intf_desc->bDescriptorType == USB_DT_INTERFACE &&
 			intf_desc->bInterfaceNumber == intf)
 			return f;
+#endif
+		if (speed == USB_SPEED_HIGH)
+			descriptors = f->hs_descriptors;
+		else
+			descriptors = f->descriptors;
+
+		while ((descriptor = *descriptors++) != NULL) {
+			intf_desc = (struct usb_interface_descriptor *)descriptor;
+			if (intf_desc->bDescriptorType == USB_DT_INTERFACE &&
+				intf_desc->bInterfaceNumber == intf) {
+				return f;
+			}
+		}
 	}
 	return NULL;
 }
@@ -309,6 +325,9 @@ static int config_buf(struct usb_configuration *config,
 	int				status;
 	int				interfaceCount = 0;
 	u8 *dest;
+#if (defined(CONFIG_USB_ANDROID_ECM) || defined(CONFIG_USB_ANDROID_ACM))
+	int	is_cdc = 0;
+#endif
 
 	/* write the config descriptor */
 	c = buf;
@@ -351,10 +370,47 @@ static int config_buf(struct usb_configuration *config,
 		while ((descriptor = *descriptors++) != NULL) {
 			intf = (struct usb_interface_descriptor *)dest;
 			if (intf->bDescriptorType == USB_DT_INTERFACE) {
-				intf->bInterfaceNumber = interfaceCount;
-				intf = (struct usb_interface_descriptor *)descriptor;
-				intf->bInterfaceNumber = interfaceCount++;
+#if (defined(CONFIG_USB_ANDROID_ECM) || defined(CONFIG_USB_ANDROID_ACM))
+				/* CDC ACM/ECM */
+				if (intf->bInterfaceClass == USB_CLASS_COMM &&
+					(intf->bInterfaceSubClass == USB_CDC_SUBCLASS_ETHERNET ||
+					 intf->bInterfaceSubClass == USB_CDC_SUBCLASS_ACM))
+					 is_cdc = 1;
+				else
+					is_cdc = 0;
+#endif
+				/* don't increment bInterfaceNumber for alternate settings */
+				if (intf->bAlternateSetting == 0) {
+					intf->bInterfaceNumber = interfaceCount;
+					intf = (struct usb_interface_descriptor *)descriptor;
+					intf->bInterfaceNumber = interfaceCount++;
+				} else {
+					intf->bInterfaceNumber = interfaceCount - 1;
+					intf = (struct usb_interface_descriptor *)descriptor;
+					intf->bInterfaceNumber = interfaceCount - 1;
+				}
+
 			}
+#if (defined(CONFIG_USB_ANDROID_ECM) || defined(CONFIG_USB_ANDROID_ACM))
+			/* set interface number dynamically for CDC interface descriptor */
+			else if (is_cdc && intf->bDescriptorType == USB_DT_CS_INTERFACE) {
+				__u8  subtype = *(dest+2);
+				if (subtype == USB_CDC_UNION_TYPE) {
+					struct usb_cdc_union_desc *desc;
+					desc = (struct usb_cdc_union_desc *)dest;
+					desc->bMasterInterface0 = interfaceCount - 1;
+					desc->bSlaveInterface0 = interfaceCount;
+				} else if (subtype == USB_CDC_CALL_MANAGEMENT_TYPE) {
+					struct usb_cdc_call_mgmt_descriptor *desc;
+					desc = (struct usb_cdc_call_mgmt_descriptor *)dest;
+					desc->bDataInterface = interfaceCount;
+				}
+			} else if (intf->bDescriptorType == USB_DT_INTERFACE_ASSOCIATION) {
+				struct usb_interface_assoc_descriptor *desc;
+				desc = (struct usb_interface_assoc_descriptor *)dest;
+				desc->bFirstInterface = interfaceCount;
+			}
+#endif
 			dest += intf->bLength;
 		}
 
@@ -472,6 +528,7 @@ static int set_config(struct usb_composite_dev *cdev,
 	int			result = -EINVAL;
 	unsigned		power = gadget_is_otg(gadget) ? 8 : 100;
 	int			tmp;
+	int			interfaceCount = 0;
 
 	if (cdev->config)
 		reset_config(cdev);
@@ -511,14 +568,15 @@ static int set_config(struct usb_composite_dev *cdev,
 		if (f->hidden)
 			continue;
 
-		result = f->set_alt(f, tmp, 0);
+		result = f->set_alt(f, interfaceCount, 0);
 		if (result < 0) {
 			DBG(cdev, "interface %d (%s/%p) alt 0 --> %d\n",
-					tmp, f->name, f, result);
+					interfaceCount, f->name, f, result);
 
 			reset_config(cdev);
 			goto done;
 		}
+		interfaceCount++;
 	}
 
 	/* when we return, be sure our power usage is valid */

@@ -16,11 +16,6 @@
 
 #include "u_serial.h"
 #include "gadget_chips.h"
-#include <linux/wakelock.h>
-#include <mach/perflock.h>
-
-static struct wake_lock vbus_idle_wake_lock;
-static struct perf_lock usb_perf_lock;
 
 #define CONFIG_MODEM_SUPPORT
 /*
@@ -795,16 +790,6 @@ static int modem_set_enabled(const char *val, struct kernel_param *kp)
 	gser = func_to_gser(modem_function);
 	if (!gser)
 		return 0;
-	if (enabled) {
-		wake_lock(&vbus_idle_wake_lock);
-		if (!is_perf_lock_active(&usb_perf_lock))
-			perf_lock(&usb_perf_lock);
-	}
-	else {
-		wake_unlock(&vbus_idle_wake_lock);
-		if (is_perf_lock_active(&usb_perf_lock))
-			perf_unlock(&usb_perf_lock);
-	}
 	gser->disabled = !enabled;
 	android_enable_function(modem_function, enabled);
 	return 0;
@@ -834,7 +819,6 @@ static int serial_set_enabled(const char *val, struct kernel_param *kp)
 static int serial_get_enabled(char *buffer, struct kernel_param *kp)
 {
 	buffer[0] = '0' + !serial_function->hidden;
-	/*printk(KERN_INFO "%s: %d\n", __func__, buffer[0] - '0');*/
 	return 1;
 }
 module_param_call(serial_enabled, serial_set_enabled, serial_get_enabled, NULL, 0664);
@@ -861,9 +845,6 @@ static struct android_usb_function android_serial_function = {
 static int __init init(void)
 {
 	printk(KERN_INFO "serial init\n");
-	wake_lock_init(&vbus_idle_wake_lock, WAKE_LOCK_IDLE, "modem_idle_lock");
-	perf_lock_init(&usb_perf_lock, PERF_LOCK_HIGHEST, "usb");
-
 	android_register_function(&android_serial_function);
 	return 0;
 }

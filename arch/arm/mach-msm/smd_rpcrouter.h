@@ -15,10 +15,6 @@
  *
  */
 
-#if defined(CONFIG_QCT_LTE)
-#include "lte/smd_rpcrouter.h"
-#endif
-
 #ifndef _ARCH_ARM_MACH_MSM_SMD_RPCROUTER_H
 #define _ARCH_ARM_MACH_MSM_SMD_RPCROUTER_H
 
@@ -35,13 +31,7 @@
 
 #define RPCROUTER_VERSION			1
 #define RPCROUTER_PROCESSORS_MAX		4
-
-#if defined(CONFIG_RPC_SIZE_1024)
-#define RPCROUTER_MSGSIZE_MAX          1024
-#else
-#define RPCROUTER_MSGSIZE_MAX           512
-#endif
-
+#define RPCROUTER_MSGSIZE_MAX			512
 #if defined(CONFIG_ARCH_MSM7X30)
 #define RPCROUTER_PEND_REPLIES_MAX		32
 #endif

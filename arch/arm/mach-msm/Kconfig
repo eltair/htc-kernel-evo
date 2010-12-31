@@ -216,7 +216,7 @@ config MACH_TROUT
 
 config MACH_SWORDFISH
 	depends on ARCH_QSD8X50
-	default y
+	default n
 	bool "Swordfish Board (QCT SURF8250)"
 	help
 	  Support for the Qualcomm SURF8250 eval board.
@@ -394,12 +394,14 @@ config MACH_MECHA
        help
          Support for the Qualcomm MSM7x30 Mecha board.
 
-config QCT_LTE
-	depends on MACH_MECHA
-        bool "Support QCT LTE function"
-        default n
-        help
-          For QCT LTE function, we need new rpcrouter and smd drivers.
+config MACH_BLITZC
+       depends on ARCH_MSM7X30
+       depends on !MSM_STACKED_MEMORY
+       depends on MACH_MECHA
+       default n
+       bool "MSM7x30 BLITZC"
+       help
+         Support for the Qualcomm MSM7x30 Blitz#C board.
 
 config MACH_GLACIER
        depends on ARCH_MSM7X30
@@ -416,14 +418,6 @@ config MACH_SPADE
        bool "MSM7x30 SPADE"
        help
          Support for the Qualcomm MSM7x30 Spade board.
-
-config MACH_DYNASTY
-       depends on ARCH_MSM7X30
-       depends on !MSM_STACKED_MEMORY
-       default n
-       bool "MSM7x30 DYNASTY"
-       help
-         Support for the Qualcomm MSM7x30 Dynasty board.
 
 config TROUT_BATTCHG
 	depends on MACH_TROUT && POWER_SUPPLY
@@ -445,16 +439,15 @@ config HTC_PWRSINK
 	default y
 	bool "HTC Power Sink Driver"
 
+config HTC_SLEEP_MODE_GPIO_DUMP
+	default y
+	bool "HTC Sleep Mode GPIO Dump"
+	help
+	   Support for dumping GPIO status when enter suspend.
+
 config HTC_POWER_COLLAPSE_MAGIC
 	default n
 	bool "Check Power Collapse State"
-
-config MSM_SPM
-	bool "Subsystem Power Manager"
-	depends on ARCH_MSM7X30
-	default n
-	help
-	   Enables support for the subsystem power manager.
 
 config SMEM_RPC_SERVER_STATE
 	default n
@@ -718,148 +711,6 @@ config MSM_ONCRPCROUTER
 	  Support for the MSM ONCRPC router for communication between
 	  the ARM9 and ARM11
 
-if QCT_LTE
-choice
-	prompt "MSM Shared memory interface version"
-	depends on MSM_SMD
-	default MSM_SMD_PKG3 if ARCH_MSM_ARM11
-	default MSM_SMD_PKG4 if ARCH_MSM_SCORPION
-
-	config MSM_SMD_PKG3
-	  bool
-	    prompt "Package 3"
-
-	config MSM_SMD_PKG4
-	  bool
-	    prompt "Package 4"
-endchoice
-
-config MSM_RPC_SDIO_XPRT
-	depends on MSM_SDIO_AL
-	default y
-	bool "MSM SDIO XPRT Layer"
-	help
-	  SDIO Transport Layer for RPC Rouer
-
-config MSM_RPC_SDIO_DEBUG
-	depends on MSM_RPC_SDIO_XPRT
-	default y
-	bool "MSM SDIO XPRT debug support"
-	help
-	  Support for debugging SDIO XPRT
-
-config MSM_SMD_DEBUG
-	depends on MSM_SMD
-	default y
-	bool "MSM SMD debug support"
-	help
-	  Support for debugging the SMD for communication
-	  between the ARM9 and ARM11
-
-config MSM_SDIO_AL
-	depends on ARCH_MSM7X30
-	default y
-	tristate "SDIO-Abstraction-Layer"
-	help
-	  Support MSM<->MDM Communication over SDIO bus.
-	  MDM SDIO-Client should have pipes support.
-
-config MSM_SDIO_AL_TEST
-	depends on MSM_SDIO_AL
-	default n
-	tristate "SDIO-Abstraction-Layer Test"
-	help
-	  SDIO-AL functionality and performance test.
-
-config MSM_N_WAY_SMSM
-	depends on (MSM_SMD && (ARCH_MSM_SCORPION || ARCH_MSM_SCORPIONMP || ARCH_MSM7X27))
-	default y
-	bool "MSM N-WAY SMSM support"
-	help
-	  Supports APPS-QDSP SMSM communication along with
-	  normal APPS-MODEM SMSM communication.
-config MSM_SMD_LOGGING
-	depends on MSM_SMD
-	default y
-	bool "MSM Shared Memory Logger"
-	help
-	  This option exposes the shared memory logger at /dev/smem_log
-	  and a debugfs node named smem_log.
-
-	  If in doubt, say yes.
-
-config MSM_SMD_NMEA
-	bool "NMEA GPS Driver"
-	depends on MSM_SMD
-	default y
-	help
-	  Enable this to support the NMEA GPS device.
-
-	  If in doubt, say yes.
-
-config MSM_SMD_PKT
-	bool "SMD Packet Driver"
-	depends on MSM_SMD
-	default y
-	help
-	  Provides a binary SMD non-muxed packet port interface.
-
-	  If in doubt, say yes.
-
-config MSM_SDIO_CTL
-	bool "SDIO CTL Driver"
-	depends on MSM_SDIO_AL
-	default y
-	help
-	  Provides a binay SDIO muxed control port interface.
-
-config MSM_SDIO_CTL_DEBUG
-	bool "SDIO CTL DEBUG Enable"
-	depends on MSM_SDIO_CTL
-	default y
-	help
-	  Support for debugging the SDIO Control Driver
-
-config MSM_ONCRPCROUTER_DEBUG
-	depends on MSM_ONCRPCROUTER
-	default y
-	bool "MSM debug ONCRPC router support"
-	help
-	  Support for debugging the ONCRPC router for communication
-	  between the ARM9 and ARM11
-
-config MSM_RPC_LOOPBACK_XPRT
-	depends on MSM_ONCRPCROUTER
-	default n
-	bool "MSM RPC local routing support"
-	help
-	  Support for routing RPC messages between APPS clients
-	  and APPS servers.  Helps in testing APPS RPC framework.
-
-config MSM_RPCSERVER_TIME_REMOTE
-	depends on MSM_ONCRPCROUTER && RTC_HCTOSYS
-	default y
-	bool "Time remote RPC server"
-	help
-	  The time remote server receives notification of time bases and
-	  reports these events to registered callback functions.
-
-config MSM_RPCSERVER_WATCHDOG
-	depends on MSM_ONCRPCROUTER
-	default y
-	bool "Watchdog RPC server"
-	help
-	  The dog_keepalive server handles watchdog events.
-
-config MSM_RPCSERVER_HANDSET
-	depends on MSM_ONCRPCROUTER
-	default y
-	bool "Handset events RPC server"
-	help
-	  Support for receiving handset events like headset detect,
-	  headset switch and clamshell state.
-endif
-
 config MSM_RPCSERVERS
 	depends on MSM_ONCRPCROUTER
 	default y
@@ -1104,12 +955,6 @@ config HTC_HEADSET_PMIC
 	help
 	  Provides support of HTC PMIC headset detection.
 
-config HTC_ONMODE_CHARGING
-	bool "On Mode Charging Icon Support"
-	default n
-	help
-		support on mode charing icon
-
 config BUILD_CIQ
         bool "Build in CIQ fixes"
         default n
@@ -1191,15 +1036,3 @@ config MSM_SSBI
 	help
 	  Enable support for SSBI bus. This is required for communicatinig with
 	  Qualcomm PMICs and Audio codecs.
-
-config RPC_SIZE_1024
-    default n
-    bool "set RPC size to 1024"
-
-config ACPUCLOCK_DEBUG
-	depends on DEBUG_FS
-	bool "Acpuclock debugfs"
-	default n
-	help
-		Acpuclock freq/vdd adjustment in debugfs.
-

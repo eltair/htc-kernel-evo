@@ -153,13 +153,10 @@ static void vfp_raise_exceptions(u32 exceptions, u32 inst, u32 fpscr, struct pt_
 	}
 
 	/*
-	 * If any of the status flags are set, update the FPSCR.
+	 * Update the FPSCR with the additional exception flags.
 	 * Comparison instructions always return at least one of
 	 * these flags set.
 	 */
-	if (exceptions & (FPSCR_N|FPSCR_Z|FPSCR_C|FPSCR_V))
-		fpscr &= ~(FPSCR_N|FPSCR_Z|FPSCR_C|FPSCR_V);
-
 	fpscr |= exceptions;
 
 	fmxr(FPSCR, fpscr);

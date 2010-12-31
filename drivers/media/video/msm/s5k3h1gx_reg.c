@@ -388,8 +388,8 @@ struct s5k3h1gx_i2c_reg_conf s5k3h1gx_full_settings_array_parallel[] =
   { 0x3065 , 0x15 },
   /* ------------- */
   { 0x310C , 0x50 }, /* pclk invert */
-  { 0x3117 , 0x0A }, /* H/V sync driving strength 6mA */
-  { 0x3118 , 0xA3 }, /* parallel data driving strength 6mA */
+  { 0x3117 , 0x0F }, /* H/V sync driving strength 6mA */
+  { 0x3118 , 0xF0 }, /* parallel data driving strength 6mA */
   /* ------------- */
 
   /*{ 0x0100 , 0x01 },*/

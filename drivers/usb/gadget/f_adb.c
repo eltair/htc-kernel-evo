@@ -697,10 +697,6 @@ static int adb_bind_config(struct usb_configuration *c)
 
 	if (board_mfg_mode() != 2)
 		dev->function.hidden = 1;
-/* Workaround: enable adb first */
-#ifdef CONFIG_MACH_MECHA
-		dev->function.hidden = 0;
-#endif
 
 	/* _adb_dev must be set before calling usb_gadget_register_driver */
 	_adb_dev = dev;

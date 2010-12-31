@@ -45,7 +45,7 @@
 #define ONCRPC_FORCE_HEADSET_SPEAKER_PROC	(4)
 #define ONCRPC_SET_AUX_PGA_GAIN_PROC		(5)
 
-#define HTC_ACOUSTIC_TABLE_SIZE        (0x20000)
+#define HTC_ACOUSTIC_TABLE_SIZE        (0x10000)
 
 #define D(fmt, args...) printk(KERN_INFO "htc-acoustic: "fmt, ##args)
 #define E(fmt, args...) printk(KERN_ERR "htc-acoustic: "fmt, ##args)

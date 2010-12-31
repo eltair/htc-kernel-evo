@@ -124,24 +124,6 @@ int _remote_spin_lock_init(remote_spin_lock_id_t id, _remote_spinlock_t *lock);
 #if defined(CONFIG_ARCH_MSM7X30)
 void _remote_spin_lock(_remote_spinlock_t *lock);
 void _remote_spin_unlock(_remote_spinlock_t *lock);
-int _remote_spin_trylock(_remote_spinlock_t *lock);
-
-/* Remote mutex definitions. */
-
-typedef struct {
-	_remote_spinlock_t	r_spinlock;
-	uint32_t		delay_us;
-} _remote_mutex_t;
-
-struct remote_mutex_id {
-	remote_spin_lock_id_t	r_spinlock_id;
-	uint32_t		delay_us;
-};
-
-int _remote_mutex_init(struct remote_mutex_id *id, _remote_mutex_t *lock);
-void _remote_mutex_lock(_remote_mutex_t *lock);
-void _remote_mutex_unlock(_remote_mutex_t *lock);
-int _remote_mutex_trylock(_remote_mutex_t *lock);
 #elif defined(CONFIG_ARCH_MSM_ARM11)
 #define _remote_spin_lock(lock)		__raw_remote_swp_spin_lock(*lock)
 #define _remote_spin_unlock(lock)	__raw_remote_swp_spin_unlock(*lock)
@@ -149,5 +131,6 @@ int _remote_mutex_trylock(_remote_mutex_t *lock);
 #define _remote_spin_lock(lock)		__raw_remote_ex_spin_lock(*lock)
 #define _remote_spin_unlock(lock)	__raw_remote_ex_spin_unlock(*lock)
 #endif	/* CONFIG_ARCH_MSM_ARM11 */
+
 #endif /* __ASM__ARCH_QC_REMOTE_SPINLOCK_H */
 

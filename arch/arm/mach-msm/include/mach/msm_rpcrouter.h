@@ -15,10 +15,6 @@
  *
  */
 
-#if defined(CONFIG_QCT_LTE)
-#include <mach/lte/msm_rpcrouter.h>
-#endif
-
 #ifndef __ASM__ARCH_MSM_RPCROUTER_H
 #define __ASM__ARCH_MSM_RPCROUTER_H
 
@@ -136,8 +132,6 @@ uint32_t msm_rpc_get_vers(struct msm_rpc_endpoint *ept);
 /* check if server version can handle client requested version */
 int msm_rpc_is_compatible_version(uint32_t server_version,
 				  uint32_t client_version);
-struct msm_rpc_endpoint *msm_rpc_connect_compatible(uint32_t prog,
-			uint32_t vers, unsigned flags);
 
 int msm_rpc_close(struct msm_rpc_endpoint *ept);
 int msm_rpc_write(struct msm_rpc_endpoint *ept,

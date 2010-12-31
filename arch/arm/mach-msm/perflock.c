@@ -145,20 +145,6 @@ static unsigned int policy_max = CONFIG_MSM_CPU_FREQ_ONDEMAND_MAX;
 static unsigned int policy_min;
 static unsigned int policy_max;
 #endif
-static int param_set_cpu_min_max(const char *val, struct kernel_param *kp)
-{
-	int ret;
-	ret = param_set_int(val, kp);
-	if (cpufreq_policy)
-		cpufreq_update_policy(cpufreq_policy->cpu);
-	return ret;
-}
-
-module_param_call(min_cpu_khz, param_set_cpu_min_max, param_get_int,
-	&policy_min, S_IWUSR | S_IRUGO);
-module_param_call(max_cpu_khz, param_set_cpu_min_max, param_get_int,
-	&policy_max, S_IWUSR | S_IRUGO);
-
 static int perflock_notifier_call(struct notifier_block *self,
 			       unsigned long event, void *data)
 {

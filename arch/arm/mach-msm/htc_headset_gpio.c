@@ -215,7 +215,6 @@ static int audiojack_probe(struct platform_device *pdev)
 	}
 
 	hs_gpio_register();
-	hs_notify_driver_ready(DRIVER_NAME);
 
 	SYS_MSG("--------------------");
 

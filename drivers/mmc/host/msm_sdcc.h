@@ -27,7 +27,7 @@
 #define MMCICLOCK		0x004
 #define MCI_CLK_ENABLE		(1 << 8)
 #define MCI_CLK_PWRSAVE		(1 << 9)
-#define MCI_CLK_WIDEBUS         (1 << 10)
+#define MCI_CLK_WIDEBUS		(1 << 10)
 #define MCI_CLK_WIDEBUS_1	(0 << 10)
 #define MCI_CLK_WIDEBUS_4	(2 << 10)
 #define MCI_CLK_WIDEBUS_8	(3 << 10)
@@ -102,7 +102,6 @@
 #define MCI_CMDRESPENDCLR	(1 << 6)
 #define MCI_CMDSENTCLR		(1 << 7)
 #define MCI_DATAENDCLR		(1 << 8)
-#define MCI_STARTBITERRCLR	(1 << 9)
 #define MCI_DATABLOCKENDCLR	(1 << 10)
 
 

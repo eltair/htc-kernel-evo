@@ -1261,6 +1261,12 @@ static void sched_avg_update(struct rq *rq)
 	s64 period = sched_avg_period();
 
 	while ((s64)(rq->clock - rq->age_stamp) > period) {
+		/*
+		 * Inline assembly required to prevent the compiler
+		 * optimising this loop into a divmod call.
+		 * See __iter_div_u64_rem() for another example of this.
+		 */
+		asm("" : "+rm" (rq->age_stamp));
 		rq->age_stamp += period;
 		rq->rt_avg /= 2;
 	}
@@ -1711,9 +1717,6 @@ static void update_shares_locked(struct rq *rq, struct sched_domain *sd)
 
 static void update_h_load(long cpu)
 {
-	if (root_task_group_empty())
-		return;
-
 	walk_tg_tree(tg_load_down, tg_nop, (void *)cpu);
 }
 
@@ -7059,7 +7062,7 @@ cpumask_var_t nohz_cpu_mask;
  */
 static void update_sysctl(void)
 {
-	unsigned int cpus = min((unsigned int)num_online_cpus(), 8U);
+	unsigned int cpus = min(num_online_cpus(), 8U);
 	unsigned int factor = 1 + ilog2(cpus);
 
 #define SET_SYSCTL(name) \

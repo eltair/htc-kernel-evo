@@ -87,7 +87,7 @@ struct ll_struct {
 	struct sk_buff_head tx_wait_q;	/* HCILL wait queue	*/
 };
 
-#ifdef CONFIG_SERIAL_MSM_HS
+#if 0	/*#ifdef CONFIG_SERIAL_MSM_HS */
 void msm_hs_request_clock_off(struct uart_port *uport);
 void msm_hs_request_clock_on(struct uart_port *uport);
 

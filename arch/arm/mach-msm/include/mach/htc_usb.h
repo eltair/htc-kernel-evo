@@ -14,15 +14,12 @@
 #ifndef __ASM_ARCH_MSM_HTC_USB_H
 #define __ASM_ARCH_MSM_HTC_USB_H
 
+#ifdef CONFIG_USB_ANDROID
+#include <linux/usb/android_composite.h>
+
 #ifdef CONFIG_ARCH_QSD8X50
 void msm_hsusb_8x50_phy_reset(void);
 #endif
-
-#ifdef CONFIG_USB_ANDROID
-#ifdef ERROR
-#undef ERROR
-#endif
-#include <linux/usb/android_composite.h>
 
 static char *usb_functions_ums[] = {
 	"usb_mass_storage",
@@ -111,6 +108,17 @@ static char *usb_functions_diag_serial[] = {
 #endif
 #endif
 
+#ifdef CONFIG_USB_ANDROID_ACM
+static char *usb_functions_adb_acm[] = {
+	"usb_mass_storage",
+	"adb",
+	"acm",
+};
+static char *usb_functions_acm[] = {
+	"acm",
+};
+#endif
+
 static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_RNDIS
 	"ether",
@@ -129,6 +137,9 @@ static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_PROJECTOR
 	"projector",
 #endif
+#ifdef CONFIG_USB_ANDROID_ACM
+	"acm",
+#endif
 };
 
 static struct android_usb_product usb_products[] = {
@@ -142,6 +153,18 @@ static struct android_usb_product usb_products[] = {
 		.num_functions	= ARRAY_SIZE(usb_functions_ums),
 		.functions	= usb_functions_ums,
 	},
+#ifdef CONFIG_USB_ANDROID_ACM
+	{
+		.product_id	= 0x0ff4,
+		.num_functions	= ARRAY_SIZE(usb_functions_acm),
+		.functions	= usb_functions_acm,
+	},
+	{
+		.product_id	= 0x0ff5,
+		.num_functions	= ARRAY_SIZE(usb_functions_adb_acm),
+		.functions	= usb_functions_adb_acm,
+	},
+#endif
 #ifdef CONFIG_USB_ANDROID_SERIAL
 	{
 		.product_id	= 0x0c03,

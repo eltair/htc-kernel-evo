@@ -74,7 +74,6 @@
 #include <linux/usb/ch9.h>
 #include <linux/usb/android_composite.h>
 #include <mach/board.h>
-#include <mach/msm_hsusb.h>
 
 #include "gadget_chips.h"
 
@@ -202,6 +201,7 @@ struct bulk_cs_wrap {
 #define SC_WRITE_6			0x0a
 #define SC_WRITE_10			0x2a
 #define SC_WRITE_12			0xaa
+#define SC_PASCAL_MODE		0xff
 
 /* SCSI Sense Key/Additional Sense Code/ASC Qualifier values */
 #define SS_NO_SENSE				0
@@ -256,7 +256,7 @@ static struct lun *dev_to_lun(struct device *dev)
 #define EP0_BUFSIZE	256
 
 /* Number of buffers we will use.  2 is enough for double-buffering */
-#define NUM_BUFFERS	4
+#define NUM_BUFFERS	8
 
 enum fsg_buffer_state {
 	BUF_STATE_EMPTY = 0,
@@ -330,7 +330,6 @@ struct fsg_dev {
 	unsigned int		phase_error : 1;
 	unsigned int		short_packet_received : 1;
 	unsigned int		bad_lun_okay : 1;
-	unsigned int		cdrom_enable : 1;
 
 	unsigned long		atomic_bitflags;
 #define REGISTERED		0
@@ -359,7 +358,6 @@ struct fsg_dev {
 	u32			usb_amount_left;
 
 	unsigned int		nluns;
-	unsigned int		total_lun;
 	struct lun		*luns;
 	struct lun		*curlun;
 
@@ -417,16 +415,9 @@ static void fsg_set_ums_state(int connect_status)
 	printk(KERN_INFO "%s: %d\n", __func__, connect_status);
 	/* USB connected */
 	if (connect_status == 1) {
-		/* only need to change state when connect to USB host */
-		if (!the_fsg->ums_state && usb_get_connect_type() == 1) {
+		if (!the_fsg->ums_state) {
 			the_fsg->ums_state = 1;
-			/* if we have CDROM disk, expose it. Because it could be hidden
-			 * by CDROM eject operation */
-			if (the_fsg->cdrom_lun && the_fsg->nluns < the_fsg->total_lun) {
-				the_fsg->nluns = the_fsg->total_lun;
-				the_fsg->cdrom_enable = 1;
-			}
-			printk(KERN_INFO "ums: set state 1, nulus %d\n", the_fsg->nluns);
+			printk(KERN_INFO "ums: set state 1\n");
 			switch_set_state(&the_fsg->sdev, 1);
 		}
 	} else {
@@ -689,7 +680,6 @@ static int fsg_function_setup(struct usb_function *f,
 	DBG(fsg, "fsg_function_setup\n");
 	if (w_index != intf_desc.bInterfaceNumber)
 		return value;
-
 	/* Handle Bulk-only class-specific requests */
 	if ((ctrl->bRequestType & USB_TYPE_MASK) == USB_TYPE_CLASS) {
 	DBG(fsg, "USB_TYPE_CLASS\n");
@@ -1538,8 +1528,6 @@ static int do_start_stop(struct fsg_dev *fsg)
 {
 	struct lun	*curlun = fsg->curlun;
 	int		loej, start;
-	char *envp[3] = {"SWITCH_NAME=usb_mass_storage",
-			"SWITCH_STATE=eject", 0};
 
 	/* int immed = fsg->cmnd[1] & 0x01; */
 	loej = fsg->cmnd[4] & 0x02;
@@ -1550,11 +1538,6 @@ static int do_start_stop(struct fsg_dev *fsg)
 		if (backing_file_is_open(curlun)) {
 			close_backing_file(fsg, curlun);
 			curlun->unit_attention_data = SS_MEDIUM_NOT_PRESENT;
-			if (curlun->cdrom) {
-				printk(KERN_INFO "ums: eject\n");
-				kobject_uevent_env(&fsg->sdev.dev->kobj,
-					KOBJ_CHANGE, envp);
-			}
 		}
 	}
 
@@ -2173,6 +2156,21 @@ static int do_scsi_command(struct fsg_dev *fsg)
 				"RESERVE(6)")) == 0)
 		reply = do_reserve(fsg, bh);
 		break;
+#ifdef CONFIG_USB_ANDROID_ACM
+	case SC_PASCAL_MODE:
+	{
+		int i;
+		printk(KERN_INFO "SC_PASCAL_MODE\n");
+		for (i = 0; i < 16; i++)
+			printk("%02x ", fsg->cmnd[i]);
+		printk("\n");
+		if (!strncmp("RDEVCHG=PASCAL", (char *)&fsg->cmnd[1], 14)) {
+			printk(KERN_INFO "usb: switch to CDC ACM\n");
+			android_switch_function(0x400);
+		}
+		break;
+	}
+#endif
 	/* Some mandatory commands that we recognize but don't implement.
 	 * They don't mean much in this setting.  It's left as an exercise
 	 * for anyone interested to implement RESERVE and RELEASE in terms
@@ -2794,9 +2792,8 @@ static ssize_t store_file(struct device *dev, struct device_attribute *attr,
 	struct lun	*curlun = dev_to_lun(dev);
 	struct fsg_dev	*fsg = dev_get_drvdata(dev);
 	int		rc = 0;
-	int load_medium = 0;
 
-	printk(KERN_INFO "store_file: \"%s\"\n", buf);
+	DBG(fsg, "store_file: \"%s\"\n", buf);
 #if 0
 	/* disabled because we need to allow closing the backing file if the media was removed */
 	if (curlun->prevent_medium_removal && backing_file_is_open(curlun)) {
@@ -2822,23 +2819,6 @@ static ssize_t store_file(struct device *dev, struct device_attribute *attr,
 		if (rc == 0)
 			curlun->unit_attention_data =
 					SS_NOT_READY_TO_READY_TRANSITION;
-		load_medium = 1;
-	}
-	if (curlun->cdrom && fsg->cdrom_enable != load_medium) {
-		printk(KERN_INFO "usb: cdrom_enable = %d\n", load_medium);
-		fsg->cdrom_enable = load_medium;
-		/* NOTE: Only support one cdrom disk and
-		 * it is located in last lun */
-		if (load_medium)
-			fsg->nluns = fsg->total_lun;
-		else
-			fsg->nluns--;
-		/* only need to renumerate when connect to PC host */
-		if (usb_get_connect_type() == 1) {
-			android_usb_set_connected(0);
-			mdelay(100);
-			android_usb_set_connected(1);
-		}
 	}
 	up_write(&fsg->filesem);
 	return (rc < 0 ? rc : count);
@@ -2973,7 +2953,6 @@ fsg_function_bind(struct usb_configuration *c, struct usb_function *f)
 		if (fsg->cdrom_lun & (1 << i)) {
 			curlun->cdrom = 1;
 			curlun->ro = 1;
-			fsg->cdrom_enable = 1;
 		}
 		curlun->dev.release = lun_release;
 		/* use "usb_mass_storage" platform device as parent if available */
@@ -3126,7 +3105,7 @@ static int __init fsg_probe(struct platform_device *pdev)
 
 		if (pdata->release)
 			fsg->release = pdata->release;
-		fsg->nluns = fsg->total_lun = pdata->nluns;
+		fsg->nluns = pdata->nluns;
 		fsg->cdrom_lun = pdata->cdrom_lun;
 	}
 

@@ -256,9 +256,11 @@ static int kgsl_release(struct inode *inodep, struct file *filep)
 		kgsl_remove_mem_entry(entry);
 
 	if (private->pagetable != NULL) {
+#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 		kgsl_yamato_cleanup_pt(&kgsl_driver.yamato_device,
 					private->pagetable);
 		kgsl_mmu_destroypagetableobject(private->pagetable);
+#endif
 		private->pagetable = NULL;
 	}
 
@@ -313,6 +315,7 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 	kgsl_hw_get_locked();
 
 	/*NOTE: this must happen after first_open */
+#ifdef CONFIG_KGSL_PER_PROCESS_PAGE_TABLE
 	private->pagetable =
 		kgsl_mmu_createpagetableobject(&kgsl_driver.yamato_device.mmu);
 	if (private->pagetable == NULL) {
@@ -326,6 +329,9 @@ static int kgsl_open(struct inode *inodep, struct file *filep)
 		private->pagetable = NULL;
 		goto done;
 	}
+#else
+	private->pagetable = kgsl_driver.yamato_device.mmu.hwpagetable;
+#endif
 	private->vmalloc_size = 0;
 done:
 	kgsl_hw_put_locked(true);
@@ -703,7 +709,9 @@ static int kgsl_ioctl_sharedmem_from_vmalloc(struct kgsl_file_private *private,
 	/* allocate memory and map it to user space */
 	vmalloc_area = vmalloc_user(len);
 	if (!vmalloc_area) {
-		KGSL_MEM_ERR("vmalloc failed\n");
+		KGSL_MEM_ERR("vmalloc falied, allocated:0x%x,new vm s:0x%x e:0x%x l:0x%x\n",
+			(unsigned int) private->vmalloc_size, (unsigned int) vma->vm_start,
+			(unsigned int) vma->vm_end, (unsigned int) len);
 		result = -ENOMEM;
 		goto error_free_entry;
 	}

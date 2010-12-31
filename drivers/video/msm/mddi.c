@@ -106,9 +106,7 @@ struct mddi_info {
 };
 
 static void mddi_init_rev_encap(struct mddi_info *mddi);
-/* FIXME: Workaround for Novatek
 static void mddi_skew_calibration(struct mddi_info *mddi);
-*/
 
 #define mddi_readl(r) readl(mddi->base + (MDDI_##r))
 #define mddi_writel(v, r) writel((v), mddi->base + (MDDI_##r))
@@ -401,15 +399,10 @@ static uint16_t mddi_init_registers(struct mddi_info *mddi)
 	mddi_writel(0x0001, VERSION);
 	mddi_writel(MDDI_HOST_BYTES_PER_SUBFRAME, BPS);
 	mddi_writel(0x0003, SPM); /* subframes per media */
-	if (mddi->type == MSM_MDP_MDDI_TYPE_II)
-		mddi_writel(0x00C8, TA1_LEN);
-	else
-		mddi_writel(0x0005, TA1_LEN);
+	mddi_writel(0x0005, TA1_LEN);
 	mddi_writel(MDDI_HOST_TA2_LEN, TA2_LEN);
 	mddi_writel(0x003C, DISP_WAKE); /* wakeup counter */
 	mddi_writel(MDDI_HOST_REV_RATE_DIV, REV_RATE_DIV);
-	if (mddi->type == MSM_MDP_MDDI_TYPE_II)
-		mddi_writel(0x01, SF_LEN_CTL_REG);
 
 	mddi_writel(MDDI_REV_BUFFER_SIZE, REV_SIZE);
 	mddi_writel(MDDI_MAX_REV_PKT_SIZE, REV_ENCAP_SZ);
@@ -476,7 +469,7 @@ static void mddi_suspend(struct msm_mddi_client_data *cdata)
 	mddi_wait_interrupt(mddi, MDDI_INT_NO_CMD_PKTS_PEND);
 	/* turn off the clock */
 	clk_disable(mddi->clk);
-#ifdef CONFIG_MSM_MDP40
+#if CONFIG_MSM_MDP40
 	clk_disable(mdp_clk);
 #endif
 	wake_unlock(&mddi->idle_lock);
@@ -491,7 +484,7 @@ static void mddi_resume(struct msm_mddi_client_data *cdata)
 	/* turn on the client */
 	if (mddi->power_client)
 		mddi->power_client(&mddi->client_data, 1);
-#ifdef CONFIG_MSM_MDP40
+#if CONFIG_MSM_MDP40
 	clk_enable(mdp_clk);
 #endif
 	/* turn on the clock */
@@ -505,8 +498,7 @@ static void mddi_resume(struct msm_mddi_client_data *cdata)
 */
 	mddi_writel(mddi->int_enable, INTEN);
 	mddi_writel(MDDI_CMD_LINK_ACTIVE, CMD);
-	if (mddi->type == MSM_MDP_MDDI_TYPE_I)
-		mddi_writel(MDDI_CMD_SEND_RTD, CMD);
+	mddi_writel(MDDI_CMD_SEND_RTD, CMD);
 	mddi_wait_interrupt(mddi, MDDI_INT_NO_CMD_PKTS_PEND);
 	mddi_set_auto_hibernate(&mddi->client_data, 1);
 	wake_unlock(&mddi->idle_lock);
@@ -838,7 +830,7 @@ static int __init mddi_rev_data_setup(struct mddi_info *mddi)
 			      sizeof(*mddi->reg_write_data);
 	return 0;
 }
-/*	FIXME: Workaround for Novatek
+
 static void mddi_skew_calibration(struct mddi_info *mddi)
 {
 	struct msm_mddi_platform_data *pdata = mddi->client_pdev.dev.platform_data;
@@ -850,7 +842,7 @@ static void mddi_skew_calibration(struct mddi_info *mddi)
 	clk_set_rate( mddi->clk, pdata->clk_rate);
 	mdelay(1);
 }
-*/
+
 static int __init mddi_probe(struct platform_device *pdev)
 {
 	struct msm_mddi_platform_data *pdata = pdev->dev.platform_data;
@@ -879,7 +871,7 @@ static int __init mddi_probe(struct platform_device *pdev)
 	printk(KERN_INFO "mddi: init() base=0x%p irq=%d\n", mddi->base,
 	       mddi->irq);
 	mddi->power_client = pdata->power_client;
-	if (pdata->type != MSM_MDP_MDDI_TYPE_I)
+	if (pdata->type != NULL)
 		mddi->type = pdata->type;
 
 	mutex_init(&mddi->reg_write_lock);

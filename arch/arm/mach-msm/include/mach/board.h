@@ -165,7 +165,6 @@ struct msm_camera_sensor_info {
 	struct camera_flash_cfg* flash_cfg;
 	int csi_if;
 	struct msm_camera_csi_params csi_params;
-	int sensor_lc_disable; /* for sensor lens correction support */
 };
 struct clk;
 
@@ -281,7 +280,6 @@ static inline void msm_hsusb_set_vbus_state(int online) {}
 
 int __init parse_tag_skuid(const struct tag *tags);
 int __init parse_tag_engineerid(const struct tag *tags);
-int __init parse_tag_memsize(const struct tag *tags);
 int board_mfg_mode(void);
 void __init msm_snddev_init(void);
 void msm_snddev_poweramp_on(void);

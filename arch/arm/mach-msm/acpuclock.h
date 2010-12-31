@@ -27,8 +27,13 @@ enum setrate_reason {
 	SETRATE_PC_IDLE,
 };
 
+#if defined(CONFIG_ARCH_MSM_SCORPION)
 int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason);
 unsigned long acpuclk_power_collapse(int from_idle);
+#else
+int acpuclk_set_rate(unsigned long rate, enum setrate_reason reason);
+unsigned long acpuclk_power_collapse(int from_idle);
+#endif
 unsigned long acpuclk_get_rate(void);
 uint32_t acpuclk_get_switch_time(void);
 unsigned long acpuclk_wait_for_irq(void);

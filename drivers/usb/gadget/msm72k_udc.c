@@ -49,7 +49,11 @@
 #ifdef CONFIG_USB_ACCESSORY_DETECT_BY_ADC
 #include <mach/htc_headset_mgr.h>
 #endif
-#include <mach/clk.h>
+#include <linux/wakelock.h>
+#include <mach/perflock.h>
+
+static struct wake_lock vbus_idle_wake_lock;
+static struct perf_lock usb_perf_lock;
 
 static const char driver_name[] = "msm72k_udc";
 
@@ -1546,18 +1550,6 @@ static void usb_start(struct usb_info *ui)
 
 	spin_lock_irqsave(&ui->lock, flags);
 	ui->flags |= USB_FLAG_START;
-/*if msm_hsusb_set_vbus_state set 1, but usb did not init, the ui =NULL, */
-/*it would cause reboot with usb, it did not swith to USB and ADB fail*/
-/*So when USB start, check again*/
-	if (vbus) {
-		ui->flags |= USB_FLAG_VBUS_ONLINE;
-	} else {
-		ui->flags |= USB_FLAG_VBUS_OFFLINE;
-	}
-	/* online->switch to USB, offline->switch to uart */
-	if (ui->usb_uart_switch)
-		ui->usb_uart_switch(!vbus);
-
 	queue_work(ui->usb_wq, &ui->work);
 	spin_unlock_irqrestore(&ui->lock, flags);
 }
@@ -1622,6 +1614,13 @@ static void usb_lpm_enter(struct usb_info *ui)
 	clk_set_rate(ui->ebi1clk, 0);
 	ui->in_lpm = 1;
 	spin_unlock_irqrestore(&ui->lock, iflags);
+
+	if (board_mfg_mode() == 1) {/*for MFG adb unstable in FROYO ROM*/
+		printk(KERN_INFO "usb: idle_wake_unlock and perf unlock\n");
+		wake_unlock(&vbus_idle_wake_lock);
+		if (is_perf_lock_active(&usb_perf_lock))
+			perf_unlock(&usb_perf_lock);
+	}
 }
 
 static void usb_lpm_exit(struct usb_info *ui)
@@ -1629,7 +1628,7 @@ static void usb_lpm_exit(struct usb_info *ui)
 	if (!ui->in_lpm)
 		return;
 	printk(KERN_INFO "usb: lpm exit\n");
-	clk_set_rate(ui->ebi1clk, acpuclk_get_max_axi_rate());
+	clk_set_rate(ui->ebi1clk, 128000000);
 	udelay(10);
 	if (ui->coreclk)
 		clk_enable(ui->coreclk);
@@ -1639,6 +1638,13 @@ static void usb_lpm_exit(struct usb_info *ui)
 		clk_enable(ui->otgclk);
 	usb_wakeup_phy(ui);
 	ui->in_lpm = 0;
+
+	if (board_mfg_mode() == 1) {/*for MFG adb unstable in FROYO ROM*/
+		printk(KERN_INFO "usb: idle_wake_lock and perf lock\n");
+		wake_lock(&vbus_idle_wake_lock);
+		if (!is_perf_lock_active(&usb_perf_lock))
+			perf_lock(&usb_perf_lock);
+	}
 }
 
 #ifdef CONFIG_USB_ACCESSORY_DETECT
@@ -2465,8 +2471,11 @@ static int msm72k_probe(struct platform_device *pdev)
 
 	/* initialize mfg serial number */
 
-	if (board_mfg_mode() == 1)
+	if (board_mfg_mode() == 1) {
 		use_mfg_serialno = 1;
+		wake_lock_init(&vbus_idle_wake_lock, WAKE_LOCK_IDLE, "usb_idle_lock");
+		perf_lock_init(&usb_perf_lock, PERF_LOCK_HIGHEST, "usb");
+	}
 	else
 		use_mfg_serialno = 0;
 	strncpy(mfg_df_serialno, "000000000000", strlen("000000000000"));

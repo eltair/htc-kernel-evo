@@ -267,6 +267,7 @@ static void suspend(struct work_struct *work)
 {
 	int ret;
 	int entry_event_num;
+	unsigned long irqflags;
 
 	pr_info("[R] suspend start\n");
 	if (has_wake_lock(WAKE_LOCK_SUSPEND)) {

@@ -16,9 +16,9 @@ ifeq ($(CONFIG_ARCH_MSM7227),y)
         obj-$(CONFIG_ANDROID_PMEM)      += pmem_7x27.o
 else
         ifeq ($(CONFIG_ARCH_MSM7X30),y)
-                obj-$(CONFIG_ANDROID_PMEM)      += pmem_qcom.o
+                obj-$(CONFIG_ANDROID_PMEM)      += pmem_7x30.o
         else
-		obj-$(CONFIG_ANDROID_PMEM)      += pmem.o
+                obj-$(CONFIG_ANDROID_PMEM)      += pmem.o
         endif
 endif
 obj-$(CONFIG_SGI_IOC4)		+= ioc4.o

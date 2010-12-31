@@ -120,12 +120,14 @@ static void report_key(struct gpio_kp *kp, int key_index, int out, int in)
 
 	if (pressed != test_bit(keycode, kp->input_devs->dev[dev]->key)) {
 		if (keycode == KEY_RESERVED) {
-			pr_info("gpiomatrix: unmapped key, %d-%d "
+			if (mi->flags & GPIOKPF_PRINT_UNMAPPED_KEYS)
+				pr_info("gpiomatrix: unmapped key, %d-%d "
 					"(%d-%d) changed to %d\n",
 					out, in, mi->output_gpios[out],
 					mi->input_gpios[in], pressed);
 		} else {
-			pr_info("gpiomatrix: key %x, %d-%d (%d-%d) "
+			if (mi->flags & GPIOKPF_PRINT_MAPPED_KEYS)
+				pr_info("gpiomatrix: key %x, %d-%d (%d-%d) "
 					"changed to %d\n", keycode,
 					out, in, mi->output_gpios[out],
 					mi->input_gpios[in], pressed);

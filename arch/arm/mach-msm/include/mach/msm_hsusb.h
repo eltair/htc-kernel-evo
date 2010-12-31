@@ -47,7 +47,6 @@ struct msm_hsusb_platform_data {
 	/* 1 : uart, 0 : usb */
 	void (*usb_uart_switch)(int);
 	void (*config_usb_id_gpios)(bool enable);
-	void (*usb_hub_enable)(bool);
 	/* val, reg pairs terminated by -1 */
 	int *phy_init_seq;
 

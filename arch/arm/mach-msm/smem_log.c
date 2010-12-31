@@ -947,11 +947,11 @@ static void init_syms(void) {}
 
 static inline unsigned int read_timestamp(void)
 {
-	unsigned int tick = 0;
+	unsigned int tick;
 
 	do {
 		tick = readl(TIMESTAMP_ADDR);
-	} while (tick != readl(TIMESTAMP_ADDR));
+	} while (tick != (tick = readl(TIMESTAMP_ADDR)));
 
 	return tick;
 }

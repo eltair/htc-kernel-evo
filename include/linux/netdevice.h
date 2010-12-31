@@ -109,25 +109,13 @@ typedef enum netdev_tx netdev_tx_t;
 # define LL_MAX_HEADER 32
 #endif
 
-/* Modified by Andy from QCT LTE0045 for LTE related function */
-#if defined(CONFIG_QCT_LTE)
-# if !defined(CONFIG_NET_IPIP) && !defined(CONFIG_NET_IPIP_MODULE) && \
+#if !defined(CONFIG_NET_IPIP) && !defined(CONFIG_NET_IPIP_MODULE) && \
     !defined(CONFIG_NET_IPGRE) &&  !defined(CONFIG_NET_IPGRE_MODULE) && \
     !defined(CONFIG_IPV6_SIT) && !defined(CONFIG_IPV6_SIT_MODULE) && \
     !defined(CONFIG_IPV6_TUNNEL) && !defined(CONFIG_IPV6_TUNNEL_MODULE)
-#  define MAX_HEADER (LL_MAX_HEADER + 20)
-# else
-#  define MAX_HEADER (LL_MAX_HEADER + 48 + 20)
-# endif
+#define MAX_HEADER LL_MAX_HEADER
 #else
-# if !defined(CONFIG_NET_IPIP) && !defined(CONFIG_NET_IPIP_MODULE) && \
-    !defined(CONFIG_NET_IPGRE) &&  !defined(CONFIG_NET_IPGRE_MODULE) && \
-    !defined(CONFIG_IPV6_SIT) && !defined(CONFIG_IPV6_SIT_MODULE) && \
-    !defined(CONFIG_IPV6_TUNNEL) && !defined(CONFIG_IPV6_TUNNEL_MODULE)
-#  define MAX_HEADER LL_MAX_HEADER
-# else
-#  define MAX_HEADER (LL_MAX_HEADER + 48)
-# endif
+#define MAX_HEADER (LL_MAX_HEADER + 48)
 #endif
 
 #endif  /*  __KERNEL__  */
